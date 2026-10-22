@@ -127,6 +127,18 @@ private struct TodayCard: View {
         .padding(12)
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.sidebarBorder))
+        .help(breakdown)
+    }
+
+    private var breakdown: String {
+        let lines = AgentKind.allCases.compactMap { agent -> String? in
+            guard let stats = today.byAgent[agent] else { return nil }
+            var line = "\(agent.displayName): \(Format.count(stats.toolCalls)) calls"
+            if stats.tokens > 0 { line += " · \(Format.tokens(stats.tokens)) tokens" }
+            if stats.costUSD > 0 { line += " · \(Format.cost(stats.costUSD))" }
+            return line
+        }
+        return lines.isEmpty ? "No activity today" : lines.joined(separator: "\n") + "\nCosts are estimates."
     }
 
     private func row(_ title: String, _ value: String) -> some View {

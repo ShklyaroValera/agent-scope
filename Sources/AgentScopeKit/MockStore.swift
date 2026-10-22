@@ -50,7 +50,7 @@ extension EventStore {
         store.addUsage(sessionId: "mock-cc", tokens: 0, costUSD: nil, contextUsed: 0.62, model: nil, at: now)
         store.addUsage(sessionId: "mock-cx", tokens: 0, costUSD: nil, contextUsed: 0.35, model: nil, at: now)
         store.addUsage(sessionId: "mock-cp", tokens: 0, costUSD: nil, contextUsed: 0.18, model: nil, at: now)
-        store.restore(today: DailyStats(toolCalls: 1284, tokens: 3_100_000, costUSD: 4.62), dayStart: now)
+        store.today = DailyStats(toolCalls: 1284, tokens: 3_100_000, costUSD: 4.62)
         return store
     }
 }

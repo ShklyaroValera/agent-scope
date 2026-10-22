@@ -16,10 +16,8 @@ struct AgentScopeApp: App {
             PopoverView()
                 .environment(model)
         } label: {
-            Image(nsImage: MenuBarIcon.image(
-                activeCount: model.snapshot.activeSessions.count,
-                attention: model.snapshot.attention
-            ))
+            MenuBarLabel()
+                .environment(model)
         }
         .menuBarExtraStyle(.window)
 
@@ -31,8 +29,8 @@ struct AgentScopeApp: App {
         .keyboardShortcut("a", modifiers: [.command, .shift])
 
         Settings {
-            Text("Settings — coming in M4")
-                .padding(40)
+            SettingsView()
+                .environment(model)
         }
     }
 }
@@ -54,5 +52,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationWillTerminate(_ notification: Notification) {
         model?.stop()
+    }
+}
+
+/// The menu bar item. Also hands the scene's `openWindow` to the model for the global shortcut and
+/// notification clicks, which happen outside any view.
+private struct MenuBarLabel: View {
+    @Environment(AppModel.self) private var model
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        let snapshot = model.snapshot
+        Image(nsImage: MenuBarIcon.image(activeCount: snapshot.activeSessions.count, attention: snapshot.attention))
+            .task { model.openGraphWindow = { openWindow(id: AppModel.graphWindowId) } }
     }
 }

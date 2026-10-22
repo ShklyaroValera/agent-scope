@@ -69,7 +69,7 @@ public final class EventStore {
     public private(set) var sessions: [String: SessionState] = [:]
     /// Newest first.
     public private(set) var feed: [FeedItem] = []
-    public private(set) var today: DailyStats
+    public internal(set) var today: DailyStats
     public private(set) var dayStart: Date
 
     public var feedLimit = 500
@@ -83,10 +83,11 @@ public final class EventStore {
     @ObservationIgnored public var processIsAlive: (Int32) -> Bool = ProcessTree.isAlive
 
     @ObservationIgnored private var callStarts: [Date] = []
+    @ObservationIgnored private var lastFailureAt: Date?
     @ObservationIgnored private var nextFeedId = 0
     @ObservationIgnored private let calendar = Calendar.current
 
-    public init(today: DailyStats = DailyStats(toolCalls: 0, tokens: 0, costUSD: 0), now: Date = Date()) {
+    public init(today: DailyStats = .zero, now: Date = Date()) {
         self.today = today
         self.dayStart = Calendar.current.startOfDay(for: now)
     }
@@ -155,7 +156,7 @@ public final class EventStore {
                     id: id, agentNodeId: nodeId, tool: tool.tool, summary: tool.summary,
                     startedAt: event.ts, status: .working
                 ))
-                if isToday { today.toolCalls += 1 }
+                if isToday { today.add(event.agent, toolCalls: 1) }
                 callStarts.append(event.ts)
                 log(label(tool), .working)
             }
@@ -168,6 +169,7 @@ public final class EventStore {
             finish(tool, at: event.ts, status: .failed, error: error, in: &state)
             state.failedTool = tool.tool
             state.retriedAfterFailure = false
+            lastFailureAt = max(lastFailureAt ?? .distantPast, event.ts)
             log("\(tool.agentType.map { "\($0) → " } ?? "")\(ToolSummary.displayName(tool.tool)) failed" + (error.map { ": \(Format.truncated($0, to: 80))" } ?? ""), .failed)
 
         case .needsYou(let info):
@@ -264,15 +266,17 @@ public final class EventStore {
             sessions: (active + idle).map { SessionSummary(session: $0.session, activity: $0.activity) },
             pending: states.filter { $0.isPendingVisible(at: now) }.compactMap(\.pending).sorted { $0.id < $1.id },
             today: today,
-            callsPerMinute: callsPerMinute(now: now)
+            callsPerMinute: callsPerMinute(now: now),
+            recentFailure: lastFailureAt.map { now.timeIntervalSince($0) < 60 } ?? false
         )
     }
 
     /// Token and cost totals arrive from transcripts, not hooks.
-    public func addUsage(sessionId: String, tokens: Int, costUSD: Double?, contextUsed: Double?, model: String?, at date: Date) {
+    public func addUsage(
+        sessionId: String, agent: AgentKind? = nil, tokens: Int, costUSD: Double?, contextUsed: Double?, model: String?, at date: Date
+    ) {
         if rollDay(to: date) {
-            today.tokens += tokens
-            today.costUSD += costUSD ?? 0
+            today.add(agent ?? sessions[sessionId]?.session.agent, tokens: tokens, costUSD: costUSD ?? 0)
         }
         guard var state = sessions[sessionId] else { return }
         // Transcript activity keeps sessions without hooks listed.
@@ -298,9 +302,14 @@ public final class EventStore {
         feed.removeAll { $0.sessionId == sessionId }
     }
 
-    public func restore(today stats: DailyStats, dayStart: Date) {
+    /// Restores today's tool-call counts after a restart. Tokens and cost are not restored: they are
+    /// recounted from today's transcripts.
+    public func restore(toolCallsFrom stats: DailyStats, dayStart: Date) {
         guard calendar.isDate(dayStart, inSameDayAs: self.dayStart) else { return }
-        today = stats
+        today.add(nil, toolCalls: stats.toolCalls)
+        for (agent, agentStats) in stats.byAgent {
+            today.byAgent[agent, default: DailyStats.AgentStats()].toolCalls += agentStats.toolCalls
+        }
     }
 
     // MARK: - Helpers
@@ -385,7 +394,7 @@ public final class EventStore {
         let start = calendar.startOfDay(for: date)
         if start > dayStart {
             dayStart = start
-            today = DailyStats(toolCalls: 0, tokens: 0, costUSD: 0)
+            today = .zero
             callStarts.removeAll()
         }
         return start == dayStart

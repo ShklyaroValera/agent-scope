@@ -195,17 +195,19 @@ public struct DiscoveredSession: Hashable, Sendable {
     public var lastModified: Date
 }
 
-/// Finds recently active transcripts and reads their usage. Not thread-safe: drive it from one queue.
+/// Reads usage from transcripts: today's files once at launch (so totals survive restarts without
+/// double counting), then whatever the sessions write. Not thread-safe: drive it from one queue.
 public final class TranscriptMonitor: @unchecked Sendable {
     public struct Update: Sendable {
         public var sessionId: String
+        public var agent: AgentKind
         public var delta: UsageAccumulator.Delta
     }
 
     public var prices: PriceTable
     public var discoveryWindow: TimeInterval = 10 * 60
     private let home: URL
-    private var readers: [String: (sessionId: String, reader: TranscriptReader, usage: UsageAccumulator)] = [:]
+    private var readers: [String: (sessionId: String, agent: AgentKind, reader: TranscriptReader, usage: UsageAccumulator)] = [:]
 
     public init(home: URL = URL(fileURLWithPath: NSHomeDirectory()), prices: PriceTable = .defaults) {
         self.home = home
@@ -222,15 +224,22 @@ public final class TranscriptMonitor: @unchecked Sendable {
             return existing.sessionId
         }
         guard let format = Self.format(for: agent) else { return nil }
-        readers[path] = (sessionId, TranscriptReader(url: URL(fileURLWithPath: path), format: format), UsageAccumulator())
+        readers[path] = (sessionId, agent, TranscriptReader(url: URL(fileURLWithPath: path), format: format), UsageAccumulator())
         return nil
     }
 
     public func isTracking(_ path: String) -> Bool { readers[path] != nil }
 
-    /// Stops following transcripts of sessions the store dropped.
-    public func retain(sessionIds: Set<String>) {
-        readers = readers.filter { sessionIds.contains($0.value.sessionId) }
+    /// Starts following every transcript modified since `date`. Returns how many were added.
+    @discardableResult
+    public func scan(modifiedSince date: Date) -> Int {
+        var added = 0
+        for (agent, file, modified) in transcriptFiles() where modified >= date && !isTracking(file.path) {
+            guard let header = Self.header(of: file, agent: agent) else { continue }
+            track(sessionId: header.id, agent: agent, path: file.path)
+            added += 1
+        }
+        return added
     }
 
     /// Reads new lines from every tracked transcript.
@@ -239,43 +248,54 @@ public final class TranscriptMonitor: @unchecked Sendable {
         for path in readers.keys {
             guard var entry = readers[path] else { continue }
             for sample in entry.reader.readNew() {
-                updates.append(Update(sessionId: entry.sessionId, delta: entry.usage.delta(for: sample, prices: prices)))
+                updates.append(Update(sessionId: entry.sessionId, agent: entry.agent, delta: entry.usage.delta(for: sample, prices: prices)))
             }
             readers[path] = entry
         }
         return updates
     }
 
-    /// Transcripts modified within `discoveryWindow` that nobody tracks yet.
-    public func discover(now: Date = Date()) -> [DiscoveredSession] {
-        var found: [DiscoveredSession] = []
-        let manager = FileManager.default
-        func recent(_ url: URL) -> Date? {
-            guard let date = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
-                  now.timeIntervalSince(date) < discoveryWindow else { return nil }
-            return date
+    /// Recently written transcripts of sessions the store does not know.
+    public func discover(knownSessionIds: Set<String>, now: Date = Date()) -> [DiscoveredSession] {
+        transcriptFiles().compactMap { agent, file, modified in
+            guard now.timeIntervalSince(modified) < discoveryWindow else { return nil }
+            let id: String
+            let cwd: String
+            if let header = Self.header(of: file, agent: agent) {
+                id = readers[file.path]?.sessionId ?? header.id
+                cwd = header.cwd
+            } else {
+                return nil
+            }
+            guard !knownSessionIds.contains(id) else { return nil }
+            return DiscoveredSession(agent: agent, sessionId: id, cwd: cwd, path: file.path, lastModified: modified)
         }
+    }
 
+    /// Claude project transcripts and Codex rollouts from today and yesterday, with modification dates.
+    func transcriptFiles(now: Date = Date()) -> [(AgentKind, URL, Date)] {
+        let manager = FileManager.default
+        func modified(_ url: URL) -> Date? {
+            (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+        }
+        var files: [(AgentKind, URL, Date)] = []
         let projects = home.appending(path: ".claude/projects")
         for directory in (try? manager.contentsOfDirectory(at: projects, includingPropertiesForKeys: nil)) ?? [] {
             for file in (try? manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-            where file.pathExtension == "jsonl" && !isTracking(file.path) {
-                guard let modified = recent(file), let header = Self.header(of: file, agent: .claude) else { continue }
-                found.append(DiscoveredSession(agent: .claude, sessionId: header.id, cwd: header.cwd, path: file.path, lastModified: modified))
+            where file.pathExtension == "jsonl" {
+                if let date = modified(file) { files.append((.claude, file, date)) }
             }
         }
-
         let calendar = Calendar.current
         for day in [now, now.addingTimeInterval(-86_400)] {
             let parts = calendar.dateComponents([.year, .month, .day], from: day)
             let directory = home.appending(path: String(format: ".codex/sessions/%04d/%02d/%02d", parts.year!, parts.month!, parts.day!))
             for file in (try? manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-            where file.lastPathComponent.hasPrefix("rollout-") && file.pathExtension == "jsonl" && !isTracking(file.path) {
-                guard let modified = recent(file), let header = Self.header(of: file, agent: .codex) else { continue }
-                found.append(DiscoveredSession(agent: .codex, sessionId: header.id, cwd: header.cwd, path: file.path, lastModified: modified))
+            where file.lastPathComponent.hasPrefix("rollout-") && file.pathExtension == "jsonl" {
+                if let date = modified(file) { files.append((.codex, file, date)) }
             }
         }
-        return found
+        return files
     }
 
     static func format(for agent: AgentKind) -> TranscriptReader.Format? {

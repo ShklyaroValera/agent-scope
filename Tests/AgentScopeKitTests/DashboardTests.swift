@@ -23,7 +23,7 @@ struct DashboardTests {
         snapshot.pending = []
         snapshot.sessions.removeAll { $0.session.status == .needsYou }
         #expect(snapshot.attention == .failed)
-        snapshot.sessions.removeAll { $0.session.status == .failed }
+        snapshot.recentFailure = false
         #expect(snapshot.attention == nil)
     }
 

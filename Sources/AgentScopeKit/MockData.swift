@@ -41,7 +41,8 @@ extension DashboardSnapshot {
                 ),
             ],
             today: DailyStats(toolCalls: 1284, tokens: 3_100_000, costUSD: 4.62),
-            callsPerMinute: 42
+            callsPerMinute: 42,
+            recentFailure: true
         )
     }
 }

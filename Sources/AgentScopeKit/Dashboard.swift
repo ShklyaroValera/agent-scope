@@ -47,11 +47,38 @@ public struct DailyStats: Hashable, Sendable {
     public var toolCalls: Int
     public var tokens: Int
     public var costUSD: Double
+    /// The same totals per agent.
+    public var byAgent: [AgentKind: AgentStats]
 
-    public init(toolCalls: Int, tokens: Int, costUSD: Double) {
+    public struct AgentStats: Hashable, Sendable {
+        public var toolCalls = 0
+        public var tokens = 0
+        public var costUSD = 0.0
+
+        public init(toolCalls: Int = 0, tokens: Int = 0, costUSD: Double = 0) {
+            self.toolCalls = toolCalls
+            self.tokens = tokens
+            self.costUSD = costUSD
+        }
+    }
+
+    public init(toolCalls: Int, tokens: Int, costUSD: Double, byAgent: [AgentKind: AgentStats] = [:]) {
         self.toolCalls = toolCalls
         self.tokens = tokens
         self.costUSD = costUSD
+        self.byAgent = byAgent
+    }
+
+    public static let zero = DailyStats(toolCalls: 0, tokens: 0, costUSD: 0)
+
+    mutating func add(_ agent: AgentKind?, toolCalls: Int = 0, tokens: Int = 0, costUSD: Double = 0) {
+        self.toolCalls += toolCalls
+        self.tokens += tokens
+        self.costUSD += costUSD
+        guard let agent else { return }
+        byAgent[agent, default: AgentStats()].toolCalls += toolCalls
+        byAgent[agent, default: AgentStats()].tokens += tokens
+        byAgent[agent, default: AgentStats()].costUSD += costUSD
     }
 }
 
@@ -66,12 +93,15 @@ public struct DashboardSnapshot: Sendable {
     public var pending: [PendingDecision]
     public var today: DailyStats
     public var callsPerMinute: Int
+    /// A tool call failed in the last minute.
+    public var recentFailure: Bool
 
-    public init(sessions: [SessionSummary], pending: [PendingDecision], today: DailyStats, callsPerMinute: Int) {
+    public init(sessions: [SessionSummary], pending: [PendingDecision], today: DailyStats, callsPerMinute: Int, recentFailure: Bool = false) {
         self.sessions = sessions
         self.pending = pending
         self.today = today
         self.callsPerMinute = callsPerMinute
+        self.recentFailure = recentFailure
     }
 
     public var activeSessions: [SessionSummary] { sessions.filter { !$0.isIdle } }
@@ -80,11 +110,11 @@ public struct DashboardSnapshot: Sendable {
     /// Needs-you outranks failures: it is the state the user can act on.
     public var attention: Attention? {
         if !pending.isEmpty || sessions.contains(where: { $0.session.status == .needsYou }) { return .needsYou }
-        if sessions.contains(where: { $0.session.status == .failed }) { return .failed }
+        if recentFailure { return .failed }
         return nil
     }
 
     public static let empty = DashboardSnapshot(
-        sessions: [], pending: [], today: DailyStats(toolCalls: 0, tokens: 0, costUSD: 0), callsPerMinute: 0
+        sessions: [], pending: [], today: .zero, callsPerMinute: 0
     )
 }

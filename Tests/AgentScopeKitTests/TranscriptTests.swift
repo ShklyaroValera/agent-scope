@@ -72,18 +72,28 @@ struct TranscriptTests {
         let day = home.appending(path: String(format: ".codex/sessions/%04d/%02d/%02d", parts.year!, parts.month!, parts.day!))
         try FileManager.default.createDirectory(at: day, withIntermediateDirectories: true)
         try FileManager.default.copyItem(at: fixtures.appending(path: "codex-0.162.0.jsonl"), to: day.appending(path: "rollout-x.jsonl"))
+        // Copies keep the fixtures' dates; discovery wants recent files.
+        for file in [project.appending(path: "s1.jsonl"), day.appending(path: "rollout-x.jsonl")] {
+            try FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: file.path)
+        }
 
         let monitor = TranscriptMonitor(home: home)
-        let found = monitor.discover().sorted { $0.agent.rawValue < $1.agent.rawValue }
+        let found = monitor.discover(knownSessionIds: []).sorted { $0.agent.rawValue < $1.agent.rawValue }
         #expect(found.map(\.agent) == [.claude, .codex])
         #expect(found[0].sessionId == "4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4")
         #expect(found[1].sessionId == "01a12f56-7bd7-7742-9408-d0322b752fb2")
         #expect(found.allSatisfy { $0.cwd == "/Users/me/dev/demo" })
 
-        monitor.track(sessionId: found[0].sessionId, agent: .claude, path: found[0].path)
-        #expect(monitor.discover().count == 1)
+        #expect(monitor.discover(knownSessionIds: [found[0].sessionId]).count == 1)
+
+        // Launch scan follows today's files; a hook naming the same file takes it over.
+        #expect(monitor.scan(modifiedSince: Calendar.current.startOfDay(for: Date())) == 2)
+        #expect(monitor.scan(modifiedSince: .distantPast) == 0)
         #expect(monitor.track(sessionId: "hook-id", agent: .claude, path: found[0].path) == found[0].sessionId)
-        #expect(monitor.poll().allSatisfy { $0.sessionId == "hook-id" })
+        let updates = monitor.poll()
+        #expect(updates.filter { $0.agent == .claude }.allSatisfy { $0.sessionId == "hook-id" })
+        #expect(updates.filter { $0.agent == .codex }.count == 5)
+        #expect(monitor.poll().isEmpty)
     }
 }
 

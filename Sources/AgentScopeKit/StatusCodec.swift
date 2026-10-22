@@ -44,12 +44,9 @@ extension DashboardSnapshot {
             .init(key: "v", value: 1),
             .init(key: "sessions", value: .array(sessions)),
             .init(key: "pending", value: .array(pending)),
-            .init(key: "today", value: .object(JSONObject([
-                .init(key: "toolCalls", value: .int(today.toolCalls)),
-                .init(key: "tokens", value: .int(today.tokens)),
-                .init(key: "costUSD", value: double(today.costUSD)),
-            ]))),
+            .init(key: "today", value: today.json),
             .init(key: "callsPerMinute", value: .int(callsPerMinute)),
+            .init(key: "recentFailure", value: .bool(recentFailure)),
         ]))
     }
 
@@ -78,12 +75,9 @@ extension DashboardSnapshot {
         self.init(
             sessions: sessions,
             pending: pending,
-            today: DailyStats(
-                toolCalls: json["today"]?["toolCalls"]?.intValue ?? 0,
-                tokens: json["today"]?["tokens"]?.intValue ?? 0,
-                costUSD: json["today"]?["costUSD"]?.doubleValue ?? 0
-            ),
-            callsPerMinute: json["callsPerMinute"]?.intValue ?? 0
+            today: json["today"].map(DailyStats.init(json:)) ?? .zero,
+            callsPerMinute: json["callsPerMinute"]?.intValue ?? 0,
+            recentFailure: json["recentFailure"]?.boolValue ?? false
         )
     }
 }

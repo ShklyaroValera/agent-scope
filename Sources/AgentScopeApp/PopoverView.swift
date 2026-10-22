@@ -4,7 +4,6 @@ import SwiftUI
 /// The `MenuBarExtra` window, laid out after `design/menubar-popover.html`.
 struct PopoverView: View {
     @Environment(AppModel.self) private var model
-    @Environment(\.openWindow) private var openWindow
     @Environment(\.openSettings) private var openSettings
 
     var body: some View {
@@ -14,6 +13,9 @@ struct PopoverView: View {
                 header(snapshot)
                 ForEach(snapshot.pending) { decision in
                     NeedsYouBanner(decision: decision)
+                }
+                if !model.useMockData, !model.settings.setupOfferDismissed, !model.agentsNeedingSetup.isEmpty {
+                    SetupOffer(agents: model.agentsNeedingSetup)
                 }
                 sessions(snapshot, now: context.date)
                 stats(snapshot.today)
@@ -76,6 +78,7 @@ struct PopoverView: View {
             StatTile(title: "Tool calls", value: Format.count(today.toolCalls))
             StatTile(title: "Tokens", value: Format.tokens(today.tokens))
             StatTile(title: "Cost today", value: Format.cost(today.costUSD))
+                .help("Estimated from transcript token counts and prices.json")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -111,8 +114,35 @@ struct PopoverView: View {
     }
 
     private func openGraph() {
-        NSApp.activate(ignoringOtherApps: true)
-        openWindow(id: AppModel.graphWindowId)
+        model.openGraph()
+    }
+}
+
+/// First-run offer to add hooks to agents that do not have them yet.
+private struct SetupOffer: View {
+    let agents: [AgentKind]
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Connect \(ListFormatter.localizedString(byJoining: agents.map(\.displayName)))")
+                .font(.ui(12, .semibold))
+                .foregroundStyle(Palette.textPrimary)
+            Text("AgentScope adds hooks to their configs (backed up first) so their sessions show up here.")
+                .font(.ui(11))
+                .foregroundStyle(Palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 6) {
+                Button("Set up") { model.runSetup(for: agents) }
+                    .buttonStyle(BannerButtonStyle(primary: true))
+                Button("Not now") { model.settings.setupOfferDismissed = true }
+                    .buttonStyle(BannerButtonStyle())
+            }
+        }
+        .padding(12)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.hairline))
+        .padding(EdgeInsets(top: 0, leading: 12, bottom: 10, trailing: 12))
     }
 }
 
