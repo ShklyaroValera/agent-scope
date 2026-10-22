@@ -28,10 +28,13 @@ struct AgentScopeCommand: ParsableCommand {
 
 struct Doctor: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Check that the app, socket and hooks are working.")
-    func run() throws { throw notYet("doctor") }
-}
 
-private func notYet(_ command: String) -> ExitCode {
-    FileHandle.standardError.write(Data("agentscope \(command): not implemented yet\n".utf8))
-    return ExitCode.failure
+    func run() throws {
+        let checks = AgentScopeKit.Doctor.run(hookBinary: HookBinary.current())
+        for check in checks {
+            print("\(check.level.symbol) \(check.title)")
+            if let detail = check.detail { print("  \(detail)") }
+        }
+        if checks.contains(where: { $0.level == .failure }) { throw ExitCode.failure }
+    }
 }

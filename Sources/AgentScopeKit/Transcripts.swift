@@ -42,7 +42,8 @@ public struct TranscriptReader: Sendable {
         self.format = format
     }
 
-    public mutating func readNew(maxBytes: Int = 64 * 1024 * 1024) -> [UsageSample] {
+    /// Large files are read over several polls, a chunk at a time, to keep memory flat.
+    public mutating func readNew(maxBytes: Int = 8 * 1024 * 1024) -> [UsageSample] {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
         defer { try? handle.close() }
         let size = (try? handle.seekToEnd()) ?? 0
@@ -64,6 +65,11 @@ public struct TranscriptReader: Sendable {
         }
         remainder = Data(data)
         return samples
+    }
+
+    /// Frees the read buffer's spare capacity after a large chunk.
+    mutating func releaseBuffers() {
+        remainder = Data(remainder)
     }
 
     mutating func parse(_ line: Data) -> UsageSample? {
@@ -250,6 +256,7 @@ public final class TranscriptMonitor: @unchecked Sendable {
             for sample in entry.reader.readNew() {
                 updates.append(Update(sessionId: entry.sessionId, agent: entry.agent, delta: entry.usage.delta(for: sample, prices: prices)))
             }
+            entry.reader.releaseBuffers()
             readers[path] = entry
         }
         return updates

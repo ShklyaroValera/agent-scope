@@ -26,5 +26,5 @@ fi
 
 # Ad-hoc signature; release signing and notarization live in scripts/release.sh.
 codesign --force --sign - "$APP/Contents/Helpers/agentscope"
-codesign --force --sign - "$APP"
+codesign --force --sign - --entitlements Support/AgentScope.entitlements "$APP"
 echo "$APP"

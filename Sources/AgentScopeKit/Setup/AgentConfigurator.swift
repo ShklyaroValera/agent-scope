@@ -14,6 +14,8 @@ public protocol AgentConfigurator: Sendable {
     func installedEvents() -> Set<String>
     /// Every event `setup` installs.
     var expectedEvents: Set<String> { get }
+    /// The command lines of AgentScope's installed hooks.
+    func hookCommands() -> [String]
 }
 
 public enum Configurators {

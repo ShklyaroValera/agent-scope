@@ -29,6 +29,8 @@ public struct SessionState: Sendable {
     public var tty: String?
     public var hostProcesses: [ProcessEntry] = []
     public var transcriptPath: String?
+    /// Known only from its transcript: activity is inferred from the transcript growing.
+    public var transcriptOnly = false
 
     public var mainNodeId: String { SessionState.nodeId(session: session.id, agentId: nil) }
 
@@ -110,6 +112,7 @@ public final class EventStore {
             calls: []
         )
         state.session.lastEventAt = max(state.session.lastEventAt, event.ts)
+        if case .sessionStarted(source: "transcript") = event.kind {} else { state.transcriptOnly = false }
         if let pid = event.pid { state.session.pid = pid }
         if let model = event.model { state.session.model = model; state.nodes[0].model = model }
         if let tty = event.tty { state.tty = tty }
@@ -234,7 +237,7 @@ public final class EventStore {
                 state.pending = nil
                 for index in state.nodes.indices { state.nodes[index].status = .idle }
             }
-            if state.turnActive, quiet > staleAfter {
+            if state.turnActive, quiet > (state.transcriptOnly ? Self.transcriptActivityWindow : staleAfter) {
                 state.turnActive = false
                 for index in state.nodes.indices where state.nodes[index].parentId != nil { state.nodes[index].status = .idle }
             }
@@ -279,14 +282,21 @@ public final class EventStore {
             today.add(agent ?? sessions[sessionId]?.session.agent, tokens: tokens, costUSD: costUSD ?? 0)
         }
         guard var state = sessions[sessionId] else { return }
-        // Transcript activity keeps sessions without hooks listed.
+        // Transcript activity keeps sessions without hooks listed, and is their only sign of work.
         if date > state.session.lastEventAt, date <= Date() { state.session.lastEventAt = date }
+        if state.transcriptOnly, Date().timeIntervalSince(date) < Self.transcriptActivityWindow, !state.ended {
+            state.turnActive = true
+        }
         state.session.tokens += tokens
         if let costUSD { state.session.costUSD = (state.session.costUSD ?? 0) + costUSD }
         if let contextUsed { state.session.contextUsed = contextUsed }
         if let model { state.session.model = model; state.nodes[0].model = model }
+        if state.transcriptOnly { updateStatus(&state, now: date) }
         sessions[sessionId] = state
     }
+
+    /// A transcript-only session counts as working this long after its last write.
+    public static let transcriptActivityWindow: TimeInterval = 60
 
     /// A session known only from its transcript.
     public func discovered(_ found: DiscoveredSession) {
@@ -295,6 +305,7 @@ public final class EventStore {
             ts: found.lastModified, agent: found.agent, sessionId: found.sessionId, cwd: found.cwd,
             transcriptPath: found.path, kind: .sessionStarted(source: "transcript")
         ))
+        sessions[found.sessionId]?.transcriptOnly = true
     }
 
     public func removeSession(_ sessionId: String) {

@@ -21,6 +21,8 @@ enum HookCommand {
         }
 
         let raw = readStdin()
+        // `agentscope doctor` times the hook with this agent name; nothing to deliver.
+        if agent == "doctor" { return }
         let paths = AgentScopePaths.default
         let now = Date()
         let pid = getpid()

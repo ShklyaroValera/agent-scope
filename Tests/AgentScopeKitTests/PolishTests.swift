@@ -76,3 +76,49 @@ struct HookStatusTests {
         #expect(Configurators.status(of: codex) == .untrusted(Set(CodexConfigurator.events)))
     }
 }
+
+struct DoctorTests {
+    @Test func reportsAppDownAndHookProblems() throws {
+        let home = FileManager.default.temporaryDirectory.appending(path: "doctor-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: home.appending(path: ".claude"), withIntermediateDirectories: true)
+        let paths = AgentScopePaths(root: URL(fileURLWithPath: "/tmp/as-doc-\(UUID().uuidString.prefix(6))"))
+        try FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
+        Spool.append(Data("{}\n".utf8), to: paths.spool)
+
+        let claude = ClaudeConfigurator(home: home)
+        var checks = Doctor.run(paths: paths, configurators: [claude, CodexConfigurator(home: home)])
+        #expect(checks.map(\.level) == [.failure, .warning, .failure, .info])
+        #expect(checks[0].title == "AgentScope app is not running")
+
+        try ConfigFile.apply(try claude.planSetup(hookBinary: "/nonexistent/agentscope"))
+        checks = Doctor.run(paths: paths, configurators: [claude])
+        #expect(checks.map(\.title).contains("Claude Code: hooks installed"))
+        #expect(checks.last?.title == "Claude Code: hooks point to a missing binary")
+    }
+
+    @Test func extractsExecutable() {
+        #expect(Doctor.executable(of: "/Applications/AgentScope.app/Contents/Helpers/agentscope hook --agent claude") == "/Applications/AgentScope.app/Contents/Helpers/agentscope")
+        #expect(Doctor.executable(of: "'/x y/agentscope' hook --agent codex") == "/x y/agentscope")
+    }
+}
+
+@MainActor
+struct TranscriptOnlySessionTests {
+    @Test func workingWhileTranscriptGrows() {
+        let store = EventStore()
+        let now = Date()
+        store.discovered(DiscoveredSession(agent: .claude, sessionId: "t", cwd: "/p/demo", path: "/p/t.jsonl", lastModified: now.addingTimeInterval(-5)))
+        #expect(store.sessions["t"]?.transcriptOnly == true)
+        #expect(store.sessions["t"]?.session.status == .idle)
+
+        store.addUsage(sessionId: "t", tokens: 10, costUSD: nil, contextUsed: 0.2, model: "claude-opus-5-5", at: now)
+        #expect(store.sessions["t"]?.session.status == .working)
+
+        store.tick(now: now.addingTimeInterval(EventStore.transcriptActivityWindow + 1))
+        #expect(store.sessions["t"]?.session.status == .idle)
+
+        // A hook event makes it a regular session.
+        store.apply(AgentEvent(ts: now, agent: .claude, sessionId: "t", cwd: "/p/demo", kind: .promptSubmitted))
+        #expect(store.sessions["t"]?.transcriptOnly == false)
+    }
+}

@@ -35,6 +35,7 @@ public struct ClaudeConfigurator: AgentConfigurator {
     public func planSetup(hookBinary: String) throws -> ConfigChange { try document.planSetup(hookBinary: hookBinary) }
     public func planRemoval() throws -> ConfigChange { try document.planRemoval() }
     public func installedEvents() -> Set<String> { document.installedEvents() }
+    public func hookCommands() -> [String] { document.ourEntries().map(\.command) }
 }
 
 /// `~/.codex/hooks.json` (verified with Codex CLI 0.162). Codex runs a new hook only after the user
@@ -69,6 +70,7 @@ public struct CodexConfigurator: AgentConfigurator {
     public func planSetup(hookBinary: String) throws -> ConfigChange { try document.planSetup(hookBinary: hookBinary) }
     public func planRemoval() throws -> ConfigChange { try document.planRemoval() }
     public func installedEvents() -> Set<String> { document.installedEvents() }
+    public func hookCommands() -> [String] { document.ourEntries().map(\.command) }
 
     /// Events whose AgentScope hook Codex has not been told to trust yet.
     public func untrustedEvents() -> Set<String> {
@@ -157,5 +159,10 @@ public struct CopilotConfigurator: AgentConfigurator {
         return Set(hooks.entries.filter { entry in
             entry.value.arrayValue?.contains { ($0["bash"]?.stringValue ?? "").contains("hook --agent copilot") } ?? false
         }.map(\.key))
+    }
+
+    public func hookCommands() -> [String] {
+        guard let json = try? ConfigFile.load(configFile).json, let hooks = json["hooks"]?.objectValue else { return [] }
+        return hooks.entries.flatMap { $0.value.arrayValue ?? [] }.compactMap { $0["bash"]?.stringValue }
     }
 }

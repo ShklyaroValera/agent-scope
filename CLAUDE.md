@@ -2,7 +2,7 @@
 
 Native macOS menu bar app + CLI that visualizes running AI coding agents (Claude Code, Codex CLI, Copilot CLI) as a live graph.
 
-- **Spec:** `SPEC.md` — source of truth for scope, architecture, milestones. Work milestone by milestone (M0 → M5); don't start Phase 2 items unless asked.
+- **Spec:** `SPEC.md` — source of truth for scope, architecture, milestones. M0–M5 are done; don't start Phase 2 items (Allow/Deny, Timeline/Usage tabs, widget) unless asked. §10.1 records what was verified about each agent's hooks.
 - **Design:** `design/*.html` — open in a browser and match layout, spacing, colors and states. Port to SwiftUI; do not embed web views.
 
 ## Stack & conventions
@@ -17,7 +17,9 @@ Native macOS menu bar app + CLI that visualizes running AI coding agents (Claude
 - No network calls. No storing prompt text unless the debug setting is on.
 
 ## Commands
-- Build/test: `swift build`, `swift test` (SwiftPM only, no Xcode project).
+- Build/test: `swift build`, `swift test` (SwiftPM only, no Xcode project). CI: `.github/workflows/ci.yml`.
+- Release: `scripts/release.sh` (universal; signs + notarizes when `DEVELOPER_ID` / `NOTARY_PROFILE` are set, updates `Casks/agentscope.rb`). App icon: `swift scripts/make-icon.swift`.
+- `agentscope doctor` checks app, hooks, Codex trust and hook speed on a real machine.
 - App bundle: `scripts/build-app.sh [debug|release] [--universal]` → `build/AgentScope.app` (CLI at `Contents/Helpers/agentscope`).
 - Visual check without clicking the menu bar (debug builds): `AGENTSCOPE_SNAPSHOT=<dir> $(swift build --show-bin-path)/AgentScopeApp` writes light/dark PNGs of the popover and other views, then quits.
 - End-to-end: `scripts/integration-test.sh` (fixtures → real `agentscope hook` → spool/socket → app → `agentscope status`; isolated `AGENTSCOPE_HOME`).
