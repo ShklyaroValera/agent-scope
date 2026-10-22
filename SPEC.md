@@ -215,4 +215,5 @@ agentscope doctor                                              # checks: app run
 - **Allow/Deny decision format (Claude Code 2.1.283):** the PermissionRequest hook prints `{"hookSpecificOutput":{"hookEventName":"PermissionRequest","decision":{"behavior":"allow"}}}` (or `"deny"` with a `message`); verified end to end (`scripts/allow-deny-e2e.sh`). While the hook waits, Claude does not show its own prompt. Not offered for Copilot (it sends PermissionRequest even for calls its rules approve) or Codex.
 
 ## 11. After v1
-Done: "Your turn" status and inbox order, Allow/Deny for Claude Code (opt-in), quick switcher (⌃⌥Space), stuck/loop detection, repo · branch identity.
+Done: "Your turn" status and inbox order, Allow/Deny for Claude Code (opt-in), quick switcher (⌃⌥Space), stuck/loop detection, repo · branch identity, Timeline tab (turn recaps), guardrails (session/daily cost, context fill), Usage tab (7/30 days by agent/project/model, last 5 hours; from transcripts).
+Not planned for now: same-file conflict warning, WidgetKit widget.

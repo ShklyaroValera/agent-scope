@@ -49,6 +49,29 @@ struct SettingsView: View {
             }
 
             Section {
+                LabeledContent("Warn when a session costs more than") {
+                    TextField("", value: $settings.sessionCostLimit, format: .currency(code: "USD"))
+                        .frame(width: 90).multilineTextAlignment(.trailing)
+                        .onSubmit { model.applySettings() }
+                }
+                LabeledContent("Warn when today costs more than") {
+                    TextField("", value: $settings.dailyCostLimit, format: .currency(code: "USD"))
+                        .frame(width: 90).multilineTextAlignment(.trailing)
+                }
+                Picker("Warn when context is fuller than", selection: $settings.contextLimitPercent) {
+                    Text("Off").tag(0)
+                    ForEach([70, 80, 85, 90, 95], id: \.self) { Text("\($0)%").tag($0) }
+                }
+                .onChange(of: settings.contextLimitPercent) { model.applySettings() }
+            } header: {
+                Text("Guardrails")
+            } footer: {
+                Text("$0 turns a limit off. Costs are estimates. Warnings show on the session and as a notification (with \"looks stuck\" notifications on).")
+                    .font(.ui(11)).foregroundStyle(.secondary)
+            }
+            .onChange(of: settings.sessionCostLimit) { model.applySettings() }
+
+            Section {
                 Toggle("Answer Claude Code's permission prompts here", isOn: $settings.allowDenyEnabled)
                 if settings.allowDenyEnabled {
                     ForEach(PermissionCategory.allCases, id: \.self) { category in

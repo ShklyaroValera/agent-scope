@@ -67,7 +67,18 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         let key = "\(session.id)|\(warning.prefix(12))"
         guard !stuckNotified.contains(key) else { return }
         stuckNotified.insert(key)
-        post(id: "stuck-\(key)", sessionId: session.id, title: "\(session.agent.displayName) looks stuck", body: "\(warning) · \(session.place)", sound: true)
+        let title = warning.hasPrefix("Spent") ? "\(session.agent.displayName) is over its budget"
+            : warning.hasPrefix("Context") ? "\(session.agent.displayName)'s context is almost full"
+            : "\(session.agent.displayName) looks stuck"
+        post(id: "stuck-\(key)", sessionId: session.id, title: title, body: "\(warning) · \(session.place)", sound: true)
+    }
+
+    /// Once per day when today's estimated cost passes the daily limit.
+    func dailyBudget(spent: Double, limit: Double, day: Date) {
+        let id = "daily-budget-\(Int(day.timeIntervalSince1970))"
+        guard !stuckNotified.contains(id) else { return }
+        stuckNotified.insert(id)
+        post(id: id, sessionId: "", title: "Agents spent \(Format.cost(spent)) today", body: "Over your daily limit of \(Format.cost(limit)) (estimate)", sound: true)
     }
 
     private func post(id: String, sessionId: String, title: String, body: String, sound: Bool, category: String = Notifier.category) {

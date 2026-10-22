@@ -39,7 +39,14 @@ enum DebugSnapshot {
         .frame(width: 1280, height: 748)
         .environment(model)
         let switcher = QuickSwitcherView(close: {}).environment(model)
-        return [("menubar-icon", AnyView(icons)), ("main-window", AnyView(window)), ("switcher", AnyView(switcher))]
+        model.loadUsageNow()
+        func tab(_ tab: MainTab) -> AnyView {
+            AnyView(TabSnapshot(tab: tab).frame(width: 1020, height: 748).environment(model))
+        }
+        return [
+            ("menubar-icon", AnyView(icons)), ("main-window", AnyView(window)), ("switcher", AnyView(switcher)),
+            ("timeline", tab(.timeline)), ("usage", tab(.usage)),
+        ]
     }
 
     /// `{"type":"debug-render","dir":"<dir>"}` on the socket: renders the live popover and main window
@@ -66,6 +73,19 @@ enum DebugSnapshot {
                   let png = NSBitmapImageRep(data: tiff)?.representation(using: .png, properties: [:])
             else { return }
             try? png.write(to: url)
+        }
+    }
+}
+/// Renders one main-window tab without touching the model's selected tab.
+private struct TabSnapshot: View {
+    let tab: MainTab
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        switch tab {
+        case .graph: GraphPanel()
+        case .timeline: TimelineTab()
+        case .usage: UsageTab()
         }
     }
 }

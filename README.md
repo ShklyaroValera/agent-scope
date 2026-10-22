@@ -15,6 +15,9 @@ A macOS menu bar app and CLI that shows every AI coding agent running on your Ma
 - **Quick switcher:** ⌃⌥Space from any app, type to filter, ↩ jumps to that agent's window.
 - **Looks stuck:** the same call failing in a row, a call running for 10+ minutes, or silence while working gets flagged (and notified).
 - **repo · branch** for every session, worktrees included, so five sessions in one repo stay apart.
+- **Timeline:** a recap of every turn — duration, files changed, commands run, failures, tokens and cost (never prompt text).
+- **Usage:** 7 or 30 days by agent, project and model, plus the last five hours, read from the agents' transcripts (so it includes days before you installed AgentScope).
+- **Guardrails:** optional limits for one session's cost, the day's cost and context fill; warnings on the session and as notifications.
 - **Agent graph:** This Mac → sessions → subagents → tool calls, animated as calls go out and answers come back. Click any node for details; pan and zoom.
 - **Spend:** today's tool calls, tokens and estimated cost, overall and per agent.
 - **100 % local.** No network calls, no accounts. Prompt text is never stored.

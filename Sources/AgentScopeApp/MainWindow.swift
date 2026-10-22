@@ -47,17 +47,10 @@ struct MainContent: View {
         switch model.tab {
         case .graph:
             GraphPanel()
-        case .timeline, .usage:
-            VStack(spacing: 8) {
-                Image(systemName: model.tab == .timeline ? "chart.bar.xaxis" : "dollarsign.circle")
-                    .font(.system(size: 28))
-                    .foregroundStyle(Palette.textTertiary)
-                Text("\(model.tab.rawValue) is coming in a later version.")
-                    .font(.ui(13))
-                    .foregroundStyle(Palette.textSecondary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Palette.surface)
+        case .timeline:
+            TimelineTab()
+        case .usage:
+            UsageTab()
         }
     }
 }

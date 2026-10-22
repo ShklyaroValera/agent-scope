@@ -11,6 +11,27 @@ public struct FeedItem: Identifiable, Hashable, Sendable {
     public var status: NodeStatus
 }
 
+/// One prompt-to-Stop turn: what the agent did, for the Timeline recap. No prompt or output text.
+public struct TurnRecord: Identifiable, Hashable, Sendable {
+    public var id: String
+    public var startedAt: Date
+    public var finishedAt: Date?
+    public var toolCalls = 0
+    /// Paths written by Edit / Write / apply_patch…, in first-touch order.
+    public var files: [String] = []
+    /// Shell commands run (summaries).
+    public var commands: [String] = []
+    /// "Bash npm test: exit code 1".
+    public var failures: [String] = []
+    public var tokens = 0
+    public var costUSD = 0.0
+
+    public init(id: String, startedAt: Date) {
+        self.id = id
+        self.startedAt = startedAt
+    }
+}
+
 /// Everything known about one session: the session itself, its agent tree and recent tool calls.
 public struct SessionState: Sendable, Equatable {
     public var session: Session
@@ -41,6 +62,8 @@ public struct SessionState: Sendable, Equatable {
     public var pidStart: Double?
     public var turnStartedAt: Date?
     public var turnFinishedAt: Date?
+    /// Recent turns, oldest first.
+    public var turns: [TurnRecord] = []
 
     public var mainNodeId: String { SessionState.nodeId(session: session.id, agentId: nil) }
 
@@ -111,6 +134,10 @@ public final class EventStore {
     public var silentLimit: TimeInterval = 5 * 60
     /// The same call failing this many times in a row counts as a loop.
     public var loopFailures = 3
+    /// Guardrails (nil = off): warn when a session costs this much, or its context fills this far.
+    public var sessionCostLimit: Double?
+    public var contextLimit: Double? = 0.85
+    public var turnsPerSession = 30
     @ObservationIgnored public var gitLookup: (String) -> GitInfo? = GitInfo.lookup
 
 
@@ -174,6 +201,8 @@ public final class EventStore {
         case .promptSubmitted:
             state.ended = false
             state.turnStartedAt = event.ts
+            state.turns.append(TurnRecord(id: "\(event.sessionId)-\(Int(event.ts.timeIntervalSince1970 * 1000))", startedAt: event.ts))
+            if state.turns.count > turnsPerSession { state.turns.removeFirst(state.turns.count - turnsPerSession) }
             state.turnActive = true
             state.failedTool = nil
             log("prompt submitted", .working)
@@ -195,6 +224,7 @@ public final class EventStore {
                 ))
                 if isToday { today.add(event.agent, toolCalls: 1) }
                 callStarts.append(event.ts)
+                recordInTurn(tool, at: event.ts, in: &state)
                 log(label(tool), .working)
             }
 
@@ -207,6 +237,10 @@ public final class EventStore {
             state.failedTool = tool.tool
             state.retriedAfterFailure = false
             lastFailureAt = max(lastFailureAt ?? .distantPast, event.ts)
+            if let index = turnIndex(at: event.ts, in: state) {
+                let label = tool.summary.isEmpty ? ToolSummary.displayName(tool.tool) : "\(ToolSummary.displayName(tool.tool)) \(tool.summary)"
+                state.turns[index].failures.append(label + (error.map { ": \(Format.truncated($0, to: 80))" } ?? ""))
+            }
             log("\(tool.agentType.map { "\($0) → " } ?? "")\(ToolSummary.displayName(tool.tool)) failed" + (error.map { ": \(Format.truncated($0, to: 80))" } ?? ""), .failed)
 
         case .needsYou(let info) where state.pending != nil && info.tool == nil && (info.agentId == nil || info.agentId == state.pendingAgentId):
@@ -253,6 +287,7 @@ public final class EventStore {
 
         case .turnFinished:
             state.turnFinishedAt = event.ts
+            if let index = state.turns.indices.last, state.turns[index].finishedAt == nil { state.turns[index].finishedAt = event.ts }
             state.turnActive = false
             state.failedTool = nil
             closeCalls(of: state.mainNodeId, at: event.ts, in: &state)
@@ -317,10 +352,17 @@ public final class EventStore {
         }
     }
 
-    /// Signs that a working agent is stuck: the same call failing in a row, a call that does not end,
-    /// or silence while it should be working.
+    /// Signs that a working agent is stuck (the same call failing in a row, a call that does not end,
+    /// silence while it should be working) or past a guardrail (cost, context fill).
     func warning(for state: SessionState, now: Date) -> String? {
-        guard !state.ended, state.turnActive else { return nil }
+        guard !state.ended else { return nil }
+        if let limit = sessionCostLimit, let cost = state.session.costUSD, cost >= limit {
+            return "Spent \(Format.cost(cost)) (limit \(Format.cost(limit)))"
+        }
+        if let limit = contextLimit, let used = state.session.contextUsed, used >= limit {
+            return "Context \(Format.percent(used)) full · compaction soon"
+        }
+        guard state.turnActive else { return nil }
         for node in state.nodes {
             let recent = state.calls.filter { $0.agentNodeId == node.id }.suffix(loopFailures)
             if recent.count == loopFailures, recent.allSatisfy({ $0.status == .failed }),
@@ -456,6 +498,10 @@ public final class EventStore {
         }
         state.session.tokens += tokens
         if let costUSD { state.session.costUSD = (state.session.costUSD ?? 0) + costUSD }
+        if let index = turnIndex(at: date, in: state) {
+            state.turns[index].tokens += tokens
+            state.turns[index].costUSD += costUSD ?? 0
+        }
         if let contextUsed { state.session.contextUsed = contextUsed }
         if let model { state.session.model = model; state.nodes[0].model = model }
         if state.transcriptOnly { updateStatus(&state, now: date) }
@@ -529,6 +575,26 @@ public final class EventStore {
         let name = ToolSummary.displayName(tool.tool)
         let base = tool.summary.isEmpty ? name : "\(name) \(tool.summary)"
         return tool.agentType.map { "\($0) → \(base)" } ?? base
+    }
+
+    /// The turn running at `date` (usage from transcripts arrives with timestamps, possibly late).
+    private func turnIndex(at date: Date, in state: SessionState) -> Int? {
+        state.turns.lastIndex { $0.startedAt <= date && ($0.finishedAt.map { date <= $0.addingTimeInterval(5) } ?? true) }
+    }
+
+    private func recordInTurn(_ tool: ToolEvent, at date: Date, in state: inout SessionState) {
+        guard let index = turnIndex(at: date, in: state) else { return }
+        state.turns[index].toolCalls += 1
+        switch PermissionCategory.of(tool: tool.tool) {
+        case .edit where !tool.summary.isEmpty:
+            // apply_patch summaries read "path +2": keep the path.
+            let path = tool.summary.components(separatedBy: " +").first ?? tool.summary
+            if !state.turns[index].files.contains(path) { state.turns[index].files.append(path) }
+        case .shell where !tool.summary.isEmpty:
+            state.turns[index].commands.append(tool.summary)
+        default:
+            break
+        }
     }
 
     private func ensureNode(for tool: ToolEvent, in state: inout SessionState) -> String {

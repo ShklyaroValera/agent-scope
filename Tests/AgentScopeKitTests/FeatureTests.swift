@@ -190,3 +190,102 @@ struct HeldSocketTests {
         #expect(SocketClient.send(Data("event\n".utf8), to: path, timeout: 0.05))
     }
 }
+
+@MainActor
+struct TurnRecapTests {
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func event(_ seconds: TimeInterval, _ kind: EventKind) -> AgentEvent {
+        AgentEvent(ts: now.addingTimeInterval(seconds), agent: .claude, sessionId: "s", cwd: "/p", pid: 7, kind: kind)
+    }
+
+    @Test func turnCollectsFilesCommandsFailuresAndUsage() throws {
+        let store = EventStore(now: now)
+        store.processIsAlive = { _ in true }
+        store.processStartTime = { _ in nil }
+        store.gitLookup = { _ in nil }
+        let edit = ToolEvent(id: "e", tool: "Edit", summary: "Sources/App.swift")
+        let patch = ToolEvent(id: "p", tool: "apply_patch", summary: "Sources/App.swift +1")
+        let test = ToolEvent(id: "t", tool: "Bash", summary: "swift test")
+        store.apply([event(0, .promptSubmitted), event(1, .toolStarted(edit)), event(2, .toolFinished(edit)),
+                     event(3, .toolStarted(patch)), event(4, .toolFinished(patch)),
+                     event(5, .toolStarted(test)), event(9, .toolFailed(test, error: "Exit code 1"))])
+        store.addUsage(sessionId: "s", tokens: 1200, costUSD: 0.05, contextUsed: nil, model: nil, at: now.addingTimeInterval(6))
+        store.apply(event(20, .turnFinished))
+        store.addUsage(sessionId: "s", tokens: 99, costUSD: 1, contextUsed: nil, model: nil, at: now.addingTimeInterval(500))
+
+        let turn = try #require(store.sessions["s"]?.turns.last)
+        #expect(turn.finishedAt == now.addingTimeInterval(20))
+        #expect(turn.toolCalls == 3)
+        #expect(turn.files == ["Sources/App.swift"])
+        #expect(turn.commands == ["swift test"])
+        #expect(turn.failures == ["Bash swift test: Exit code 1"])
+        #expect(turn.tokens == 1200)
+        #expect(turn.costUSD == 0.05)
+    }
+
+    @Test func guardrailsWarnOnCostAndContext() {
+        let store = EventStore(now: now)
+        store.processIsAlive = { _ in true }
+        store.processStartTime = { _ in nil }
+        store.gitLookup = { _ in nil }
+        store.sessionCostLimit = 2
+        store.apply([event(0, .promptSubmitted), event(1, .turnFinished)])
+        store.addUsage(sessionId: "s", tokens: 10, costUSD: 1, contextUsed: 0.5, model: nil, at: now.addingTimeInterval(2))
+        store.tick(now: now.addingTimeInterval(3))
+        #expect(store.sessions["s"]?.session.warning == nil)
+        store.addUsage(sessionId: "s", tokens: 10, costUSD: 0.2, contextUsed: 0.9, model: nil, at: now.addingTimeInterval(4))
+        store.tick(now: now.addingTimeInterval(5))
+        #expect(store.sessions["s"]?.session.warning == "Context 90% full · compaction soon")
+        store.addUsage(sessionId: "s", tokens: 10, costUSD: 1, contextUsed: nil, model: nil, at: now.addingTimeInterval(6))
+        store.tick(now: now.addingTimeInterval(7))
+        #expect(store.sessions["s"]?.session.warning == "Spent $2.20 (limit $2.00)")
+    }
+}
+
+struct UsageHistoryTests {
+    let fixtures = FixtureLoader.root.appending(path: "transcripts")
+
+    @Test func countsToolCallsOnEveryContentBlock() throws {
+        let url = FileManager.default.temporaryDirectory.appending(path: "tools-\(UUID().uuidString).jsonl")
+        let usage = #""usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}"#
+        let lines = [
+            #"{"type":"assistant","timestamp":"2026-10-22T10:00:00.000Z","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"text","text":"…"}],\#(usage)}}"#,
+            #"{"type":"assistant","timestamp":"2026-10-22T10:00:01.000Z","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"tool_use","id":"t1"}],\#(usage)}}"#,
+            #"{"type":"assistant","timestamp":"2026-10-22T10:00:02.000Z","message":{"id":"m1","model":"claude-opus-5-5","content":[{"type":"tool_use","id":"t2"}],\#(usage)}}"#,
+        ]
+        try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: url)
+        var reader = TranscriptReader(url: url, format: .claude)
+        let samples = reader.readNew()
+        #expect(samples.reduce(0) { $0 + $1.toolCalls } == 2)
+        #expect(samples.reduce(0) { $0 + $1.tokens } == 15)
+    }
+
+    @Test func reportsDaysAgentsModelsAndCaches() throws {
+        let home = FileManager.default.temporaryDirectory.appending(path: "usage-\(UUID().uuidString)")
+        let project = home.appending(path: ".claude/projects/-Users-me-dev-demo")
+        let codexDay = home.appending(path: ".codex/sessions/2026/10/12")
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: codexDay, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: fixtures.appending(path: "claude-2.1.283.jsonl"), to: project.appending(path: "s1.jsonl"))
+        try FileManager.default.copyItem(at: fixtures.appending(path: "codex-0.162.0.jsonl"), to: codexDay.appending(path: "rollout-x.jsonl"))
+        let now = try #require(TranscriptReader.parseDate("2026-10-22T18:00:00.000Z"))
+        for file in [project.appending(path: "s1.jsonl"), codexDay.appending(path: "rollout-x.jsonl")] {
+            try FileManager.default.setAttributes([.modificationDate: now], ofItemAtPath: file.path)
+        }
+
+        let history = UsageHistory(home: home)
+        let report = history.report(days: 30, now: now)
+        #expect(report.total.tokens == 35_912 + (179_824 - 155_392) + 2_491)
+        #expect(report.grouped { $0.project }.map(\.name).sorted() == ["demo"])
+        #expect(Set(report.grouped { $0.model }.map(\.name)) == ["Haiku", "GPT-5.6"])
+        let claude = report.days.values.flatMap { $0 }.filter { $0.key.agent == .claude }.reduce(0.0) { $0 + $1.value.costUSD }
+        #expect(abs(claude - 0.098756) < 1e-9)
+        #expect(report.days.values.flatMap { $0 }.filter { $0.key.agent == .codex }.allSatisfy { $0.value.unpricedTokens == $0.value.tokens })
+        #expect(report.dayStarts.count == 30)
+
+        // Unchanged files come from the cache: same result.
+        #expect(history.report(days: 30, now: now).total == report.total)
+        #expect(history.report(days: 7, now: now).total.tokens == 35_912)
+    }
+}

@@ -9,7 +9,7 @@ enum MainTab: String, CaseIterable, Identifiable {
     case graph = "Graph", timeline = "Timeline", usage = "Usage"
     var id: String { rawValue }
 
-    static let available: [MainTab] = [.graph]
+    static let available: [MainTab] = [.graph, .timeline, .usage]
 }
 
 @MainActor
@@ -190,6 +190,8 @@ final class AppModel {
     /// Pushes settings into the store, the transcript reader and the shortcut.
     func applySettings() {
         store.removeAfter = TimeInterval(settings.idleTimeoutMinutes * 60)
+        store.sessionCostLimit = settings.sessionCostLimit > 0 ? settings.sessionCostLimit : nil
+        store.contextLimit = settings.contextLimitPercent > 0 ? Double(settings.contextLimitPercent) / 100 : nil
         transcripts.enabledAgents = settings.enabledAgents
         for (id, state) in store.sessions where !settings.enabledAgents.contains(state.session.agent) {
             store.removeSession(id)
@@ -272,6 +274,9 @@ final class AppModel {
                 if let warning = state.session.warning { notifier.stuck(state.session, warning: warning) }
             }
         }
+        if settings.dailyCostLimit > 0, store.today.costUSD >= settings.dailyCostLimit {
+            notifier.dailyBudget(spent: store.today.costUSD, limit: settings.dailyCostLimit, day: store.dayStart)
+        }
         guard settings.notifyFinished else { return }
         for (id, state) in store.sessions {
             // Only a real end of turn, not timeouts or process deaths, and not turns from before launch.
@@ -313,6 +318,41 @@ final class AppModel {
     func loadPrices() {
         transcripts.loadPrices()
     }
+
+    // MARK: - Usage
+
+    private(set) var usageReport: UsageReport?
+    private(set) var isLoadingUsage = false
+    var usageDays = 7 {
+        didSet { refreshUsage() }
+    }
+    @ObservationIgnored private lazy var usageHistory = UsageHistory(prices: PriceTable.load(from: paths.prices))
+    @ObservationIgnored private let usageQueue = DispatchQueue(label: "agentscope.usage", qos: .utility)
+
+    /// Rebuilds the Usage tab's report from transcripts in the background (unchanged files come from cache).
+    func refreshUsage() {
+        guard !isLoadingUsage else { return }
+        isLoadingUsage = true
+        let days = usageDays
+        let prices = PriceTable.load(from: paths.prices)
+        usageQueue.async { [weak self, usageHistory] in
+            usageHistory.prices = prices
+            let report = usageHistory.report(days: days)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    self?.usageReport = report
+                    self?.isLoadingUsage = false
+                }
+            }
+        }
+    }
+
+    #if DEBUG
+    /// Snapshots render synchronously.
+    func loadUsageNow() {
+        usageReport = usageHistory.report(days: usageDays)
+    }
+    #endif
 
     // MARK: - Setup
 

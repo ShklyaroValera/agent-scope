@@ -42,6 +42,17 @@ final class AppSettings {
     var notifyStuck: Bool {
         didSet { defaults.set(notifyStuck, forKey: "notifyStuck") }
     }
+    /// Guardrails; 0 turns a limit off.
+    var sessionCostLimit: Double {
+        didSet { defaults.set(sessionCostLimit, forKey: "sessionCostLimit") }
+    }
+    var dailyCostLimit: Double {
+        didSet { defaults.set(dailyCostLimit, forKey: "dailyCostLimit") }
+    }
+    /// Warn when a session's context is this full (percent; 0 = off).
+    var contextLimitPercent: Int {
+        didSet { defaults.set(contextLimitPercent, forKey: "contextLimitPercent") }
+    }
     /// ⌃⌥Space opens the session switcher from any app.
     var switcherShortcut: Bool {
         didSet { defaults.set(switcherShortcut, forKey: "switcherShortcut") }
@@ -62,5 +73,8 @@ final class AppSettings {
         allowDenyWait = defaults.object(forKey: "allowDenyWait") as? Int ?? 30
         notifyStuck = defaults.object(forKey: "notifyStuck") as? Bool ?? true
         switcherShortcut = defaults.object(forKey: "switcherShortcut") as? Bool ?? true
+        sessionCostLimit = defaults.double(forKey: "sessionCostLimit")
+        dailyCostLimit = defaults.double(forKey: "dailyCostLimit")
+        contextLimitPercent = defaults.object(forKey: "contextLimitPercent") as? Int ?? 85
     }
 }

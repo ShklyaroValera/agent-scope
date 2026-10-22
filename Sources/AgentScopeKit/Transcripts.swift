@@ -13,6 +13,8 @@ public struct UsageSample: Hashable, Sendable {
     /// Tokens in the context window after this response.
     public var contextTokens: Int?
     public var contextWindow: Int?
+    /// Tool calls the model made in this line (for history; live counts come from hooks).
+    public var toolCalls = 0
 
     public init() {}
 
@@ -86,7 +88,17 @@ public struct TranscriptReader: Sendable {
         switch json["type"]?.stringValue {
         case "assistant":
             let message = json["message"]
-            guard let usage = message?["usage"], let id = message?["id"]?.stringValue, !recentMessageIds.contains(id) else { return nil }
+            let toolUses = message?["content"]?.arrayValue?.filter { $0["type"] == "tool_use" }.count ?? 0
+            guard let usage = message?["usage"], let id = message?["id"]?.stringValue else { return nil }
+            if recentMessageIds.contains(id) {
+                // Later content blocks of a counted response: only their tool calls are new.
+                guard toolUses > 0 else { return nil }
+                var sample = UsageSample()
+                sample.ts = json["timestamp"]?.stringValue.flatMap(Self.parseDate)
+                sample.model = message?["model"]?.stringValue
+                sample.toolCalls = toolUses
+                return sample
+            }
             // Each content block of one response repeats the same usage.
             recentMessageIds.append(id)
             if recentMessageIds.count > 64 { recentMessageIds.removeFirst() }
@@ -95,6 +107,7 @@ public struct TranscriptReader: Sendable {
             var sample = UsageSample()
             sample.ts = json["timestamp"]?.stringValue.flatMap(Self.parseDate)
             sample.model = model
+            sample.toolCalls = toolUses
             sample.input = usage["input_tokens"]?.intValue ?? 0
             sample.output = usage["output_tokens"]?.intValue ?? 0
             sample.cacheRead = usage["cache_read_input_tokens"]?.intValue ?? 0
@@ -120,6 +133,12 @@ public struct TranscriptReader: Sendable {
         case ("turn_context", _):
             model = payload?["model"]?.stringValue ?? model
             return nil
+        case ("response_item", "function_call"), ("response_item", "custom_tool_call"), ("response_item", "local_shell_call"):
+            var sample = UsageSample()
+            sample.ts = json["timestamp"]?.stringValue.flatMap(Self.parseDate)
+            sample.model = model
+            sample.toolCalls = 1
+            return sample
         case ("event_msg", "task_started"):
             contextWindow = payload?["model_context_window"]?.intValue ?? contextWindow
             return nil
@@ -181,7 +200,7 @@ public struct UsageAccumulator: Sendable {
             let window = sample.model.flatMap { prices.price(for: $0)?.contextWindow } ?? sample.contextWindow ?? 200_000
             context = min(1, Double(tokens) / Double(window))
         }
-        return Delta(tokens: sample.tokens, costUSD: cost, contextUsed: context, model: sample.model, ts: sample.ts)
+        return Delta(tokens: sample.tokens, costUSD: sample.tokens > 0 ? cost : nil, contextUsed: context, model: sample.model, ts: sample.ts)
     }
 }
 
@@ -268,7 +287,7 @@ public final class TranscriptMonitor: @unchecked Sendable {
         var updates: [Update] = []
         for path in readers.keys {
             guard var entry = readers[path] else { continue }
-            for sample in entry.reader.readNew() {
+            for sample in entry.reader.readNew() where sample.tokens > 0 || sample.contextTokens != nil {
                 updates.append(Update(sessionId: entry.sessionId, agent: entry.agent, delta: entry.usage.delta(for: sample, prices: prices)))
             }
             entry.reader.releaseBuffers()
