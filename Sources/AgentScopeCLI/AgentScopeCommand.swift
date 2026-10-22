@@ -25,7 +25,7 @@ struct AgentScopeCommand: ParsableCommand {
         abstract: "See every AI coding agent running on this Mac.",
         discussion: "`agentscope hook --agent <a> [--event <e>]` is called by agent hooks; you never run it yourself.",
         version: AgentScopeVersion.current,
-        subcommands: [Setup.self, Uninstall.self, Status.self, Doctor.self]
+        subcommands: [Setup.self, Uninstall.self, Status.self, Limits.self, Doctor.self]
     )
 }
 

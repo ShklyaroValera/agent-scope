@@ -162,13 +162,14 @@ public struct ClaudeStatusLine: Sendable {
 
     public var settingsFile: URL { home.appending(path: ".claude/settings.json") }
 
-    /// `test -x B && B statusline [--then-b64 X] || <fallback>`: when AgentScope is gone, the original
-    /// command still runs (or nothing).
+    /// `if test -x B; then B statusline [--then-b64 X]; else <original>; fi`: when AgentScope is gone, the
+    /// original command still runs (or nothing), and a failing original never runs twice.
     static func command(binary: String, original: String?) -> String {
         let quoted = ConfigFile.shellQuoted(binary)
-        guard let original else { return "test -x \(quoted) && \(quoted) statusline || true" }
+        guard let original else { return "if test -x \(quoted); then \(quoted) statusline; fi" }
         let encoded = Data(original.utf8).base64EncodedString()
-        return "test -x \(quoted) && \(quoted) statusline --then-b64 \(encoded) || /bin/bash -c \"$(echo \(encoded) | base64 -D)\""
+        return "if test -x \(quoted); then \(quoted) statusline --then-b64 \(encoded); "
+            + "else /bin/bash -c \"$(echo \(encoded) | base64 -D)\"; fi"
     }
 
     static func isOurs(_ command: String) -> Bool {
