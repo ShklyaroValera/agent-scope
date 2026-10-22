@@ -50,5 +50,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         #if DEBUG
         if let model { DebugSnapshot.runIfRequested(model: model) }
         #endif
+        model?.start()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        model?.stop()
     }
 }

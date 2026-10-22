@@ -1,0 +1,25 @@
+{
+  "session_id": "4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "a79910f6-5bf1-4bfc-93a1-42e9a738912d",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Read",
+  "tool_input": {
+    "file_path": "/Users/me/dev/demo/notes.txt"
+  },
+  "tool_response": {
+    "type": "text",
+    "file": {
+      "filePath": "/Users/me/dev/demo/notes.txt",
+      "content": "hello fixture\n",
+      "numLines": 2,
+      "startLine": 1,
+      "totalLines": 2
+    }
+  },
+  "tool_use_id": "toolu_01THGgdK1dT4eFmTocpHoqv2",
+  "duration_ms": 2
+}

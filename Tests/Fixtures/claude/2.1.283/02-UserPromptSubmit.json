@@ -1,0 +1,10 @@
+{
+  "session_id": "4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "a79910f6-5bf1-4bfc-93a1-42e9a738912d",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "Do these steps in order, using tools, and keep replies very short: 1) Run the bash command: ls -la  2) Read the file notes.txt  3) Read the file does-not-exist.txt (it will fail, that's expected)  4) Run the bash command: false  5) Use the Agent tool to launch an Explore subagent that uses Glob to list *.txt files here and reports back. 6) Run bash: rm notes.txt (it may be denied). Then say done.\n"
+}

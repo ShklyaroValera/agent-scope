@@ -1,0 +1,10 @@
+{
+  "session_id": "4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "295ba595-c885-435d-ad52-178295ded60f",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "<task-notification>\n<task-id>ad692143dc4f0c606</task-id>\n<tool-use-id>toolu_01HBn6txct4FuPo8iEP9BukT</tool-use-id>\n<output-file>/tmp/scratch\n<status>completed</status>\n<summary>Agent \"List .txt files with Glob\" finished</summary>\n<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>\n<result>I found 1 .txt file in the current directory:\n\n- `/Users/me/dev/demo/notes.txt`</result>\n<usage><subagent_tokens>12505</subagent_tokens><tool_uses>1</tool_uses><duration_ms>5660</duration_ms></usage>\n</task-notification>"
+}

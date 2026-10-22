@@ -26,21 +26,6 @@ struct AgentScopeCommand: ParsableCommand {
     )
 }
 
-struct Setup: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Add AgentScope hooks to installed agents.")
-    func run() throws { throw notYet("setup") }
-}
-
-struct Uninstall: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Remove AgentScope hooks, leaving your own untouched.")
-    func run() throws { throw notYet("uninstall") }
-}
-
-struct Status: ParsableCommand {
-    static let configuration = CommandConfiguration(abstract: "Show running agent sessions.")
-    func run() throws { throw notYet("status") }
-}
-
 struct Doctor: ParsableCommand {
     static let configuration = CommandConfiguration(abstract: "Check that the app, socket and hooks are working.")
     func run() throws { throw notYet("doctor") }

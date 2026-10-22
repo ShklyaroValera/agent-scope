@@ -1,0 +1,89 @@
+import Foundation
+
+/// The `{"type":"status"}` request `agentscope status` sends over the socket, and the snapshot JSON the app returns.
+public enum StatusProtocol {
+    public static let request = Data(#"{"v":1,"type":"status"}"#.utf8 + [0x0A])
+
+    public static func isStatusRequest(_ line: Data) -> Bool {
+        (try? JSONValue(parsing: line))?["type"]?.stringValue == "status"
+    }
+}
+
+extension DashboardSnapshot {
+    public var json: JSONValue {
+        func time(_ date: Date) -> JSONValue { .number(String(format: "%.3f", date.timeIntervalSince1970)) }
+        func double(_ value: Double?) -> JSONValue { value.map { .number(String($0)) } ?? .null }
+        let sessions: [JSONValue] = sessions.map { summary in
+            let session = summary.session
+            return .object(JSONObject([
+                .init(key: "id", value: .string(session.id)),
+                .init(key: "agent", value: .string(session.agent.rawValue)),
+                .init(key: "project", value: .string(session.project)),
+                .init(key: "cwd", value: .string(session.cwd.path)),
+                .init(key: "pid", value: session.pid.map { .int(Int($0)) } ?? .null),
+                .init(key: "model", value: session.model.map(JSONValue.string) ?? .null),
+                .init(key: "status", value: .string(session.status.rawValue)),
+                .init(key: "activity", value: .string(summary.activity)),
+                .init(key: "startedAt", value: time(session.startedAt)),
+                .init(key: "lastEventAt", value: time(session.lastEventAt)),
+                .init(key: "contextUsed", value: double(session.contextUsed)),
+                .init(key: "tokens", value: .int(session.tokens)),
+                .init(key: "costUSD", value: double(session.costUSD)),
+            ]))
+        }
+        let pending: [JSONValue] = pending.map {
+            .object(JSONObject([
+                .init(key: "id", value: .string($0.id)),
+                .init(key: "sessionId", value: .string($0.sessionId)),
+                .init(key: "agent", value: .string($0.agent.rawValue)),
+                .init(key: "project", value: .string($0.project)),
+                .init(key: "summary", value: .string($0.summary)),
+            ]))
+        }
+        return .object(JSONObject([
+            .init(key: "v", value: 1),
+            .init(key: "sessions", value: .array(sessions)),
+            .init(key: "pending", value: .array(pending)),
+            .init(key: "today", value: .object(JSONObject([
+                .init(key: "toolCalls", value: .int(today.toolCalls)),
+                .init(key: "tokens", value: .int(today.tokens)),
+                .init(key: "costUSD", value: double(today.costUSD)),
+            ]))),
+            .init(key: "callsPerMinute", value: .int(callsPerMinute)),
+        ]))
+    }
+
+    public init(json: JSONValue) {
+        func date(_ value: JSONValue?) -> Date { Date(timeIntervalSince1970: value?.doubleValue ?? 0) }
+        let sessions: [SessionSummary] = (json["sessions"]?.arrayValue ?? []).compactMap { item in
+            guard let id = item["id"]?.stringValue, let agent = item["agent"]?.stringValue.flatMap(AgentKind.init) else { return nil }
+            var session = Session(
+                id: id, agent: agent, cwd: URL(fileURLWithPath: item["cwd"]?.stringValue ?? "/"),
+                pid: item["pid"]?.intValue.map(Int32.init), model: item["model"]?.stringValue,
+                startedAt: date(item["startedAt"]), lastEventAt: date(item["lastEventAt"]),
+                status: item["status"]?.stringValue.flatMap(NodeStatus.init) ?? .idle,
+                contextUsed: item["contextUsed"]?.doubleValue, tokens: item["tokens"]?.intValue ?? 0,
+                costUSD: item["costUSD"]?.doubleValue
+            )
+            if let project = item["project"]?.stringValue { session.project = project }
+            return SessionSummary(session: session, activity: item["activity"]?.stringValue ?? "")
+        }
+        let pending: [PendingDecision] = (json["pending"]?.arrayValue ?? []).compactMap { item in
+            guard let id = item["id"]?.stringValue, let agent = item["agent"]?.stringValue.flatMap(AgentKind.init) else { return nil }
+            return PendingDecision(
+                id: id, sessionId: item["sessionId"]?.stringValue ?? "", agent: agent,
+                project: item["project"]?.stringValue ?? "", summary: item["summary"]?.stringValue ?? ""
+            )
+        }
+        self.init(
+            sessions: sessions,
+            pending: pending,
+            today: DailyStats(
+                toolCalls: json["today"]?["toolCalls"]?.intValue ?? 0,
+                tokens: json["today"]?["tokens"]?.intValue ?? 0,
+                costUSD: json["today"]?["costUSD"]?.doubleValue ?? 0
+            ),
+            callsPerMinute: json["callsPerMinute"]?.intValue ?? 0
+        )
+    }
+}

@@ -1,0 +1,23 @@
+{
+  "session_id": "4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "a79910f6-5bf1-4bfc-93a1-42e9a738912d",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls -la",
+    "description": "List files in current directory with details"
+  },
+  "tool_response": {
+    "stdout": "total 8\ndrwxr-xr-x@ 3 me  wheel   96 Oct 22 16:51 .\ndrwx------@ 7 me  wheel  224 Oct 22 16:51 ..\n-rw-r--r--@ 1 me  wheel   14 Oct 22 16:51 notes.txt",
+    "stderr": "",
+    "interrupted": false,
+    "isImage": false,
+    "noOutputExpected": false
+  },
+  "tool_use_id": "toolu_01PjDapkUfUpDXrrV11iG7j7",
+  "duration_ms": 696
+}

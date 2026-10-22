@@ -10,6 +10,7 @@ enum DebugSnapshot {
         guard let path = ProcessInfo.processInfo.environment["AGENTSCOPE_SNAPSHOT"] else { return }
         let directory = URL(fileURLWithPath: path)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        model.useMockData = true
         for scheme in [ColorScheme.light, .dark] {
             let suffix = scheme == .light ? "light" : "dark"
             render(PopoverView().environment(model), scheme: scheme, to: directory.appending(path: "popover-\(suffix).png"))

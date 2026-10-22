@@ -16,7 +16,8 @@ public struct SessionSummary: Identifiable, Hashable, Sendable {
     public var isIdle: Bool { session.status == .idle }
 
     public func activityLine(now: Date) -> String {
-        isIdle ? "Idle · finished \(Format.elapsed(now.timeIntervalSince(session.lastEventAt))) ago" : activity
+        guard isIdle, activity.isEmpty else { return activity }
+        return "Idle · finished \(Format.elapsed(now.timeIntervalSince(session.lastEventAt))) ago"
     }
 
     public func elapsed(now: Date) -> String {

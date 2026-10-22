@@ -1,0 +1,24 @@
+{
+  "session_id": "4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "a79910f6-5bf1-4bfc-93a1-42e9a738912d",
+  "permission_mode": "default",
+  "agent_id": "ad692143dc4f0c606",
+  "agent_type": "Explore",
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4/subagents/agent-ad692143dc4f0c606.jsonl",
+  "last_assistant_message": "I found 1 .txt file in the current directory:\n\n- `/Users/me/dev/demo/notes.txt`",
+  "background_tasks": [
+    {
+      "id": "ad692143dc4f0c606",
+      "type": "subagent",
+      "status": "running",
+      "description": "List .txt files with Glob",
+      "agent_type": "Explore"
+    }
+  ],
+  "session_crons": []
+}

@@ -1,0 +1,13 @@
+{
+  "session_id": "4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "295ba595-c885-435d-ad52-178295ded60f",
+  "permission_mode": "default",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "Done. Steps completed:\n1. ✓ Listed files - found notes.txt\n2. ✓ Read notes.txt - \"hello fixture\"\n3. ✓ Attempted does-not-exist.txt - failed as expected\n4. ✓ Ran `false` - failed as expected\n5. ✓ Agent found 1 .txt file (notes.txt)\n6. ✓ Tried `rm notes.txt` - denied as expected",
+  "background_tasks": [],
+  "session_crons": []
+}

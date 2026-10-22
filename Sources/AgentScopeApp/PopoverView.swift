@@ -45,8 +45,14 @@ struct PopoverView: View {
             .padding(EdgeInsets(top: 2, leading: 16, bottom: 6, trailing: 16))
 
         VStack(spacing: 0) {
-            if snapshot.sessions.isEmpty {
-                Text("No agents running. Start Claude Code, Codex or Copilot CLI.")
+            if let error = model.serverError {
+                Text("Can't listen for agent events: \(error)")
+                    .font(.ui(11))
+                    .foregroundStyle(Palette.failedText)
+                    .padding(8)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if snapshot.sessions.isEmpty {
+                Text("No agents running. Start Claude Code, Codex or Copilot CLI — or run `agentscope setup` first.")
                     .font(.ui(11))
                     .foregroundStyle(Palette.textTertiary)
                     .padding(8)
@@ -128,12 +134,14 @@ private struct NeedsYouBanner: View {
                 .lineLimit(1)
                 .truncationMode(.middle)
             HStack(spacing: 6) {
-                Button("Allow") { model.decide(decision, allow: true) }
-                    .buttonStyle(BannerButtonStyle(primary: true))
-                Button("Deny") { model.decide(decision, allow: false) }
-                    .buttonStyle(BannerButtonStyle())
+                if model.showsDecisionButtons {
+                    Button("Allow") { model.decide(decision, allow: true) }
+                        .buttonStyle(BannerButtonStyle(primary: true))
+                    Button("Deny") { model.decide(decision, allow: false) }
+                        .buttonStyle(BannerButtonStyle())
+                }
                 Button("Jump to") { model.jump(toSession: decision.sessionId) }
-                    .buttonStyle(BannerButtonStyle())
+                    .buttonStyle(BannerButtonStyle(primary: !model.showsDecisionButtons))
             }
         }
         .padding(.horizontal, 12)
