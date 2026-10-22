@@ -38,7 +38,8 @@ enum DebugSnapshot {
         }
         .frame(width: 1280, height: 748)
         .environment(model)
-        return [("menubar-icon", AnyView(icons)), ("main-window", AnyView(window))]
+        let switcher = QuickSwitcherView(close: {}).environment(model)
+        return [("menubar-icon", AnyView(icons)), ("main-window", AnyView(window)), ("switcher", AnyView(switcher))]
     }
 
     /// `{"type":"debug-render","dir":"<dir>"}` on the socket: renders the live popover and main window

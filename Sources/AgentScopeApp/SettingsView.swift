@@ -32,6 +32,8 @@ struct SettingsView: View {
                     get: { _ = refresh; return model.launchAtLogin },
                     set: { model.launchAtLogin = $0; refresh += 1 }
                 ))
+                Toggle("Switch to a session with ⌃⌥Space from any app", isOn: $settings.switcherShortcut)
+                    .onChange(of: settings.switcherShortcut) { model.applySettings() }
                 Toggle("Open Agent Graph with ⌘⇧A from any app", isOn: $settings.globalShortcut)
                     .onChange(of: settings.globalShortcut) { model.applySettings() }
                 Picker("Hide idle sessions after", selection: $settings.idleTimeoutMinutes) {
@@ -43,6 +45,30 @@ struct SettingsView: View {
             Section("Notifications") {
                 Toggle("When an agent needs you", isOn: $settings.notifyNeedsYou)
                 Toggle("When an agent finishes its turn", isOn: $settings.notifyFinished)
+                Toggle("When an agent looks stuck (loops, long calls, silence)", isOn: $settings.notifyStuck)
+            }
+
+            Section {
+                Toggle("Answer Claude Code's permission prompts here", isOn: $settings.allowDenyEnabled)
+                if settings.allowDenyEnabled {
+                    ForEach(PermissionCategory.allCases, id: \.self) { category in
+                        Toggle(category.label, isOn: Binding(
+                            get: { settings.allowDenyCategories.contains(category) },
+                            set: { on in
+                                if on { settings.allowDenyCategories.insert(category) } else { settings.allowDenyCategories.remove(category) }
+                            }
+                        ))
+                        .padding(.leading, 16)
+                    }
+                    Picker("Wait for my answer", selection: $settings.allowDenyWait) {
+                        ForEach([15, 30, 60, 90], id: \.self) { Text("\($0) s").tag($0) }
+                    }
+                }
+            } header: {
+                Text("Permission prompts")
+            } footer: {
+                Text("While a prompt waits here, Claude doesn't show it in the terminal; after the wait it does. Needs hooks from this version (Set up again). Codex and Copilot keep their own prompts: Copilot asks AgentScope even about commands its rules allow, so holding them would stall your agent.")
+                    .font(.ui(11)).foregroundStyle(.secondary)
             }
 
             Section {

@@ -37,8 +37,9 @@ struct HooksDocument: Sendable {
                     guard !found, var entry = entries[entryIndex].objectValue,
                           let existing = entry["command"]?.stringValue, isOurs(existing) else { continue }
                     found = true
-                    if existing != command {
+                    if existing != command || entry["timeout"]?.intValue != timeout(event) {
                         entry["command"] = .string(command)
+                        entry["timeout"] = .int(timeout(event))
                         entries[entryIndex] = .object(entry)
                     }
                 }

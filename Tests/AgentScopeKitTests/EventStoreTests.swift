@@ -101,8 +101,9 @@ struct EventStoreTests {
         #expect(store.sessions[sessionId]?.session.status == .idle)
     }
 
+    /// No call running and no events for a long time: the turn is over. (A running call keeps it working.)
     @Test func staleTurnStops() throws {
-        let (store, _) = try replay(upTo: 3)
+        let (store, _) = try replay(upTo: 4)
         store.tick(now: start.addingTimeInterval(store.staleAfter + 10))
         #expect(store.sessions[sessionId]?.session.status == .idle)
     }

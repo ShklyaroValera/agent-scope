@@ -16,6 +16,9 @@ public struct SessionSummary: Identifiable, Hashable, Sendable {
     public var isIdle: Bool { session.status == .idle }
 
     public func activityLine(now: Date) -> String {
+        if session.status == .yourTurn, let since = session.waitingSince {
+            return "Your turn · waiting \(Format.elapsed(now.timeIntervalSince(since)))"
+        }
         guard isIdle, activity.isEmpty else { return activity }
         return "Idle · finished \(Format.elapsed(now.timeIntervalSince(session.lastEventAt))) ago"
     }
@@ -87,7 +90,7 @@ public struct DailyStats: Hashable, Sendable {
 
 /// The dot next to the menu bar icon.
 public enum Attention: Sendable {
-    case needsYou, failed
+    case needsYou, failed, yourTurn
 }
 
 /// Everything the menu bar popover shows.
@@ -108,12 +111,17 @@ public struct DashboardSnapshot: Sendable {
     }
 
     public var activeSessions: [SessionSummary] { sessions.filter { !$0.isIdle } }
+    /// Agents doing something right now (the menu bar count).
+    public var workingCount: Int {
+        sessions.filter { [.working, .failed, .needsYou, .answered].contains($0.session.status) }.count
+    }
     public var idleSessions: [SessionSummary] { sessions.filter(\.isIdle) }
 
     /// Needs-you outranks failures: it is the state the user can act on.
     public var attention: Attention? {
         if !pending.isEmpty || sessions.contains(where: { $0.session.status == .needsYou }) { return .needsYou }
         if recentFailure { return .failed }
+        if sessions.contains(where: { $0.session.status == .yourTurn }) { return .yourTurn }
         return nil
     }
 

@@ -61,7 +61,7 @@ private struct MenuBarLabel: View {
 
     var body: some View {
         let snapshot = model.snapshot
-        Image(nsImage: MenuBarIcon.cachedImage(activeCount: snapshot.activeSessions.count, attention: snapshot.attention))
+        Image(nsImage: MenuBarIcon.cachedImage(activeCount: snapshot.workingCount, attention: snapshot.attention))
             .task { model.openGraphWindow = { openWindow(id: AppModel.graphWindowId) } }
     }
 }

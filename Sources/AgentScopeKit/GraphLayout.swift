@@ -85,7 +85,7 @@ public enum GraphBuilder {
     public static func build(sessions: [SessionState], now: Date, metrics: Metrics = Metrics()) -> GraphModel {
         let ordered = order(sessions)
         guard !ordered.isEmpty else { return .empty }
-        let idle = ordered.filter { $0.session.status == .idle }.count
+        let idle = ordered.filter { $0.session.status.isResting }.count
         var root = Item(
             id: "root", kind: .root(active: ordered.count - idle, idle: idle), status: idle == ordered.count ? .idle : .working,
             size: metrics.root
@@ -105,9 +105,9 @@ public enum GraphBuilder {
 
     /// Active sessions oldest first, then idle ones most recent first (same as the popover).
     public static func order(_ sessions: [SessionState]) -> [SessionState] {
-        let active = sessions.filter { $0.session.status != .idle }.sorted { $0.session.startedAt < $1.session.startedAt }
-        let idle = sessions.filter { $0.session.status == .idle }.sorted { $0.session.lastEventAt > $1.session.lastEventAt }
-        return active + idle
+        let active = sessions.filter { !$0.session.status.isResting }.sorted { $0.session.startedAt < $1.session.startedAt }
+        let resting = sessions.filter { $0.session.status.isResting }.sorted { $0.session.lastEventAt > $1.session.lastEventAt }
+        return active + resting
     }
 
     private static func sessionItem(_ state: SessionState, now: Date, metrics: Metrics) -> Item {
@@ -117,8 +117,8 @@ public enum GraphBuilder {
             id: "session:\(id)", kind: .session(sessionId: id), status: status, size: metrics.session,
             flow: status == .working ? .down : nil
         )
-        // Idle sessions stay compact.
-        guard status != .idle else { return item }
+        // Sessions that aren't working stay compact.
+        guard !status.isResting else { return item }
         let mainNeedsYou = state.session.status == .needsYou && state.pendingAgentId == nil
         if let pending = state.pending, mainNeedsYou {
             item.children.append(Item(

@@ -72,7 +72,7 @@ enum Palette {
     static func edge(_ status: NodeStatus) -> Color {
         switch status {
         case .working: call
-        case .answered: answer
+        case .answered, .yourTurn: answer
         case .needsYou: needsYou
         case .failed: failed
         case .idle: idle
@@ -83,6 +83,7 @@ enum Palette {
         switch status {
         case .working: call
         case .answered: answer
+        case .yourTurn: answeredText
         case .needsYou: needsYouText
         case .failed: failedText
         case .idle: textTertiary

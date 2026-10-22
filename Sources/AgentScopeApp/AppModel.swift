@@ -1,5 +1,6 @@
 import AgentScopeKit
 import AppKit
+import Carbon.HIToolbox
 import Foundation
 import Observation
 import ServiceManagement
@@ -38,9 +39,19 @@ final class AppModel {
     @ObservationIgnored private lazy var transcripts = TranscriptCoordinator(store: store, paths: paths)
     @ObservationIgnored private let notifier = Notifier()
     @ObservationIgnored private var hotKey: GlobalHotKey?
+    @ObservationIgnored private var switcherHotKey: GlobalHotKey?
+    @ObservationIgnored let quickSwitcher = QuickSwitcher()
     @ObservationIgnored private var notifiedTurns: [String: Date] = [:]
     @ObservationIgnored private let launchedAt = Date()
     @ObservationIgnored private var lastRun: [Job: Date] = [:]
+    /// Permission requests whose hook waits for an answer here, by session.
+    private(set) var heldDecisions: [String: HeldDecision] = [:]
+
+    struct HeldDecision {
+        let reply: SocketReply
+        let pendingId: String
+        let deadline: Date
+    }
 
     /// Periodic work, each on its own interval (seconds).
     private enum Job: Hashable {
@@ -61,8 +72,11 @@ final class AppModel {
     /// The store the windows draw: live, or the design mock.
     var activeStore: EventStore { useMockData ? mockStore : store }
 
-    /// Allow/Deny needs `agentscope hook --decide`, which is not built yet.
-    var showsDecisionButtons: Bool { false }
+    /// Allow/Deny can be answered here while Claude's hook waits for it.
+    func decisionDeadline(_ decision: PendingDecision) -> Date? {
+        guard let held = heldDecisions[decision.sessionId], held.pendingId == decision.id else { return nil }
+        return held.deadline
+    }
 
     var snapshot: DashboardSnapshot { activeStore.snapshot() }
 
@@ -82,6 +96,9 @@ final class AppModel {
     func start() {
         guard server == nil else { return }
         try? FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
+        #if DEBUG
+        if ProcessInfo.processInfo.environment["AGENTSCOPE_DEBUG_ALLOW_DENY"] == "1" { settings.allowDenyEnabled = true }
+        #endif
         if let saved = DailyStatsFile.load(from: paths.dailyStats) {
             store.restore(toolCallsFrom: saved, dayStart: Date())
         }
@@ -103,6 +120,19 @@ final class AppModel {
                 }
                 return Data("ok\n".utf8)
             }
+            // Stands in for clicking Allow/Deny in end-to-end tests.
+            if let request = try? JSONValue(parsing: line), request["type"] == "debug-decide" {
+                let allow = request["allow"]?.boolValue ?? false
+                let held = DispatchQueue.main.sync {
+                    MainActor.assumeIsolated { () -> Int in
+                        guard let self else { return 0 }
+                        let sessions = Array(self.heldDecisions.keys)
+                        sessions.forEach { self.decide(sessionId: $0, allow: allow) }
+                        return sessions.count
+                    }
+                }
+                return Data("decided \(held)\n".utf8)
+            }
             #endif
             guard let envelope = try? HookEnvelope(line: line) else { return nil }
             let events = Normalizer.normalize(envelope)
@@ -110,6 +140,21 @@ final class AppModel {
                 MainActor.assumeIsolated { self?.ingest(events) }
             }
             return nil
+        } holdHandler: { [weak self] line in
+            // `agentscope hook --decide`: keep the connection until the user answers or time runs out.
+            guard let envelope = try? HookEnvelope(line: line), envelope.decide else { return nil }
+            let events = Normalizer.normalize(envelope)
+            let agent = envelope.agentKind
+            return { reply in
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self else { return reply.send(Decision.noDecision) }
+                        self.store.apply(events.filter { self.settings.enabledAgents.contains($0.agent) })
+                        self.hold(reply, events: events, agent: agent)
+                        self.checkAttention()
+                    }
+                }
+            }
         }
         do {
             try server.start()
@@ -126,6 +171,7 @@ final class AppModel {
         transcripts.loadPrices()
         refreshHookStatuses()
         notifier.onJump = { [weak self] in self?.jump(toSession: $0) }
+        notifier.onDecide = { [weak self] in self?.decide(sessionId: $0, allow: $1) }
         notifier.start()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.everySecond() }
@@ -137,6 +183,7 @@ final class AppModel {
         server = nil
         timer?.invalidate()
         hotKey?.unregister()
+        switcherHotKey?.unregister()
         saveStats()
     }
 
@@ -153,6 +200,40 @@ final class AppModel {
             hotKey?.unregister()
             hotKey = nil
         }
+        if settings.switcherShortcut, switcherHotKey == nil {
+            switcherHotKey = GlobalHotKey(keyCode: kVK_Space, modifiers: controlKey | optionKey) { [weak self] in
+                guard let self else { return }
+                self.quickSwitcher.toggle(model: self)
+            }
+        } else if !settings.switcherShortcut {
+            switcherHotKey?.unregister()
+            switcherHotKey = nil
+        }
+    }
+
+    /// Keeps a waiting permission hook if Allow/Deny is on for this tool; otherwise lets the agent ask itself.
+    private func hold(_ reply: SocketReply, events: [AgentEvent], agent: AgentKind?) {
+        let request = events.lazy.compactMap { event -> (String, NeedsYouInfo)? in
+            if case .needsYou(let info) = event.kind { return (event.sessionId, info) }
+            return nil
+        }.first
+        guard settings.allowDenyEnabled, agent == .claude, let (sessionId, info) = request,
+              settings.allowDenyCategories.contains(PermissionCategory.of(tool: info.tool ?? "")),
+              let pendingId = store.sessions[sessionId]?.pending?.id
+        else { return reply.send(Decision.noDecision) }
+        heldDecisions[sessionId]?.reply.send(Decision.noDecision)
+        let deadline = Date().addingTimeInterval(min(TimeInterval(settings.allowDenyWait), Decision.longestWait))
+        heldDecisions[sessionId] = HeldDecision(reply: reply, pendingId: pendingId, deadline: deadline)
+    }
+
+    /// Releases holds that ran out of time or whose request went away; the agent then asks in its terminal.
+    private func expireDecisions() {
+        let now = Date()
+        for (sessionId, held) in heldDecisions
+        where held.deadline <= now || store.sessions[sessionId]?.pending?.id != held.pendingId {
+            held.reply.send(Decision.noDecision)
+            heldDecisions[sessionId] = nil
+        }
     }
 
     private func ingest(_ events: [AgentEvent]) {
@@ -162,6 +243,7 @@ final class AppModel {
 
     private func everySecond() {
         store.tick()
+        if !heldDecisions.isEmpty { expireDecisions() }
         checkAttention()
         let now = Date()
         func due(_ job: Job) -> Bool {
@@ -182,14 +264,20 @@ final class AppModel {
 
     private func checkAttention() {
         if settings.notifyNeedsYou {
-            notifier.needsYou(store.snapshot().pending)
+            let pending = store.snapshot().pending
+            notifier.needsYou(pending, decidable: Set(pending.filter { decisionDeadline($0) != nil }.map(\.id)))
+        }
+        if settings.notifyStuck {
+            for state in store.sessions.values {
+                if let warning = state.session.warning { notifier.stuck(state.session, warning: warning) }
+            }
         }
         guard settings.notifyFinished else { return }
         for (id, state) in store.sessions {
             // Only a real end of turn, not timeouts or process deaths, and not turns from before launch.
             guard let finished = state.turnFinishedAt, finished > launchedAt, notifiedTurns[id] != finished else { continue }
             notifiedTurns[id] = finished
-            notifier.finished(state.session)
+            notifier.finished(state.session, turn: state.lastTurn)
         }
     }
 
@@ -308,7 +396,15 @@ final class AppModel {
         openGraphWindow?()
     }
 
-    func decide(_ decision: PendingDecision, allow: Bool) {}
+    func decide(_ decision: PendingDecision, allow: Bool) {
+        decide(sessionId: decision.sessionId, allow: allow)
+    }
+
+    func decide(sessionId: String, allow: Bool) {
+        guard let held = heldDecisions.removeValue(forKey: sessionId) else { return }
+        held.reply.send((allow ? Decision.allow : .deny).reply)
+        store.resolvePending(sessionId: sessionId)
+    }
 
     /// Brings the agent's terminal or IDE to the front, or says why it can't.
     func jump(toSession sessionId: String) {

@@ -22,9 +22,13 @@ public struct ClaudeConfigurator: AgentConfigurator {
     public var expectedEvents: Set<String> { Set(Self.events) }
 
     var document: HooksDocument {
+        // PermissionRequest may wait for an answer from AgentScope (`--decide`); the app replies at once
+        // unless Allow/Deny is on, and never holds longer than the timeout minus a margin.
         HooksDocument(
             agent: .claude, file: settingsFile, events: Self.events,
-            matcherEvents: ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest"]
+            matcherEvents: ["PreToolUse", "PostToolUse", "PostToolUseFailure", "PermissionRequest"],
+            timeout: { $0 == "PermissionRequest" ? Decision.hookTimeout : 5 },
+            extraArguments: { $0 == "PermissionRequest" ? " --decide" : "" }
         )
     }
 

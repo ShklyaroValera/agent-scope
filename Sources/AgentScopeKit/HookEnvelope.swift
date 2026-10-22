@@ -13,6 +13,8 @@ public struct HookEnvelope: Sendable {
     /// The hook's parent chain, nearest first.
     public var ancestors: [ProcessEntry]
     public var payload: JSONValue
+    /// The hook waits for a permission decision on this connection (`agentscope hook --decide`).
+    public var decide = false
 
     public init(agent: String, event: String?, ts: Date, hookPid: Int32, cwd: String, ancestors: [ProcessEntry], payload: JSONValue) {
         self.agent = agent
@@ -47,7 +49,8 @@ public struct HookEnvelope: Sendable {
 
     /// Builds the wire line around a privacy-filtered copy of `rawPayload`.
     public static func line(
-        agent: String, event: String?, ts: Date, hookPid: Int32, cwd: String, ancestors: [ProcessEntry], rawPayload: Data
+        agent: String, event: String?, ts: Date, hookPid: Int32, cwd: String, ancestors: [ProcessEntry], rawPayload: Data,
+        decide: Bool = false
     ) -> Data {
         var header = JSONObject([
             .init(key: "v", value: 1),
@@ -59,6 +62,7 @@ public struct HookEnvelope: Sendable {
         header["pid"] = .int(Int(hookPid))
         header["cwd"] = .string(cwd)
         header["ancestors"] = .array(ancestors.map(\.json))
+        if decide { header["decide"] = true }
         var text = JSONValue.object(header).compactText
         text.removeLast()
         var line = Data(text.utf8)
@@ -138,6 +142,7 @@ public struct HookEnvelope: Sendable {
         self.cwd = json["cwd"]?.stringValue ?? ""
         self.ancestors = (json["ancestors"]?.arrayValue ?? []).compactMap(ProcessEntry.init(json:))
         self.payload = json["payload"] ?? .null
+        self.decide = json["decide"]?.boolValue ?? false
     }
 }
 

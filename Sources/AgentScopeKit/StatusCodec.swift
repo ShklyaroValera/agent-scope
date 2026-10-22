@@ -29,6 +29,10 @@ extension DashboardSnapshot {
                 .init(key: "contextUsed", value: double(session.contextUsed)),
                 .init(key: "tokens", value: .int(session.tokens)),
                 .init(key: "costUSD", value: double(session.costUSD)),
+                .init(key: "waitingSince", value: session.waitingSince.map(time) ?? .null),
+                .init(key: "repo", value: session.repo.map(JSONValue.string) ?? .null),
+                .init(key: "branch", value: session.branch.map(JSONValue.string) ?? .null),
+                .init(key: "warning", value: session.warning.map(JSONValue.string) ?? .null),
             ]))
         }
         let pending: [JSONValue] = pending.map {
@@ -63,6 +67,10 @@ extension DashboardSnapshot {
                 costUSD: item["costUSD"]?.doubleValue
             )
             if let project = item["project"]?.stringValue { session.project = project }
+            session.waitingSince = item["waitingSince"]?.doubleValue.map(Date.init(timeIntervalSince1970:))
+            session.repo = item["repo"]?.stringValue
+            session.branch = item["branch"]?.stringValue
+            session.warning = item["warning"]?.stringValue
             return SessionSummary(session: session, activity: item["activity"]?.stringValue ?? "")
         }
         let pending: [PendingDecision] = (json["pending"]?.arrayValue ?? []).compactMap { item in

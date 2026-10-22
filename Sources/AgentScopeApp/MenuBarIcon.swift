@@ -40,7 +40,11 @@ enum MenuBarIcon {
             }
             if let attention {
                 x += 4
-                let color = attention == .needsYou ? NSColor(hex: 0xE8890C) : NSColor(hex: 0xD93F3F)
+                let color = switch attention {
+                case .needsYou: NSColor(hex: 0xE8890C)
+                case .failed: NSColor(hex: 0xD93F3F)
+                case .yourTurn: NSColor(hex: 0x22A06B)
+                }
                 color.setFill()
                 NSBezierPath(ovalIn: NSRect(x: x, y: (size.height - dot) / 2, width: dot, height: dot)).fill()
             }

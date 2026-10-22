@@ -44,12 +44,12 @@ struct CodexNormalizerTests {
         #expect(events.first?.transcriptPath != nil)
     }
 
-    @Test @MainActor func replayEndsIdleWithFiveCalls() throws {
+    @Test @MainActor func replayEndsWaitingForThePromptWithFiveCalls() throws {
         let store = EventStore(now: Date(timeIntervalSince1970: 1_800_000_000))
         store.processIsAlive = { _ in true }
         store.apply(try events())
         let state = try #require(store.sessions.values.first)
-        #expect(state.session.status == .idle)
+        #expect(state.session.status == .yourTurn)
         #expect(state.session.model == "gpt-6.1-sol")
         #expect(state.calls.count == 5)
         #expect(state.calls.allSatisfy { $0.status == .answered })

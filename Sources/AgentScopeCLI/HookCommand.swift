@@ -3,7 +3,8 @@ import Darwin
 import Foundation
 
 /// `agentscope hook --agent <a> [--event <e>] [--decide]`: forwards one hook payload to the app.
-/// Hard rules (CLAUDE.md): always exit 0, print nothing, finish in < 100 ms.
+/// Hard rules (CLAUDE.md): always exit 0, print nothing, finish in < 100 ms — except `--decide`, the
+/// opt-in permission flow, which waits for the user's answer and prints the agent's decision format.
 enum HookCommand {
     static let connectTimeout: TimeInterval = 0.05
     /// Connect plus write; the whole hook must stay under 100 ms.
@@ -13,11 +14,13 @@ enum HookCommand {
     static func run(arguments: [String]) {
         var agent = "unknown"
         var event: String?
+        var decide = false
         var iterator = arguments.makeIterator()
         while let argument = iterator.next() {
             switch argument {
             case "--agent": agent = iterator.next() ?? agent
             case "--event": event = iterator.next()
+            case "--decide": decide = true
             default: break
             }
         }
@@ -38,10 +41,24 @@ enum HookCommand {
             hookPid: pid,
             cwd: FileManager.default.currentDirectoryPath,
             ancestors: ProcessTree.ancestors(of: getppid()),
-            rawPayload: raw
+            rawPayload: raw,
+            decide: decide
         )
         // `agentscope doctor` times the full hook with this agent name; nothing to deliver.
         if agent == "doctor" { return }
+        if decide, let kind = AgentKind(rawValue: agent) {
+            // Wait for Allow/Deny from the app. No app, no answer or "none": print nothing, and the agent
+            // shows its own prompt.
+            guard let reply = SocketClient.request(line, to: paths.socket.path, timeout: Decision.longestWait + 5) else {
+                try? FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
+                Spool.append(line, to: paths.spool)
+                return
+            }
+            if let output = Decision(reply: reply)?.hookOutput(for: kind) {
+                FileHandle.standardOutput.write(Data((output + "\n").utf8))
+            }
+            return
+        }
         if !SocketClient.send(line, to: paths.socket.path, timeout: connectTimeout, writeTimeout: sendTimeout) {
             try? FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
             Spool.append(line, to: paths.spool)

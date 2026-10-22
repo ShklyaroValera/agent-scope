@@ -22,6 +22,8 @@ Native macOS menu bar app + CLI that visualizes running AI coding agents (Claude
 - `agentscope doctor` checks app, hooks, Codex trust and hook speed on a real machine.
 - App bundle: `scripts/build-app.sh [debug|release] [--universal]` → `build/AgentScope.app` (CLI at `Contents/Helpers/agentscope`).
 - Visual check without clicking the menu bar (debug builds): `AGENTSCOPE_SNAPSHOT=<dir> $(swift build --show-bin-path)/AgentScopeApp` writes light/dark PNGs of the popover and other views, then quits.
+- Allow/Deny end-to-end: `scripts/allow-deny-e2e.sh` (debug app + real `claude -p` on haiku; costs two short runs).
+- Live UI without screen access (debug builds): send `{"type":"debug-render","dir":"<dir>"}` to the socket; the running app renders its popover and main window to PNG.
 - End-to-end: `scripts/integration-test.sh` (fixtures → real `agentscope hook` → spool/socket → app → `agentscope status`; isolated `AGENTSCOPE_HOME`).
 - Capturing fixtures: `touch "$AGENTSCOPE_HOME/keep-raw-payloads"` makes `agentscope hook` save raw stdin under `$AGENTSCOPE_HOME/payloads/<agent>/`; point a throwaway agent run at the hook (Claude: `claude -p --setting-sources project --settings <file>` with the hooks block, prompt on stdin), then `scripts/import-fixtures.py <payload-dir> <agent> <version> <run-cwd>` scrubs paths into `Tests/Fixtures/`.
 - `AGENTSCOPE_HOME=<dir>` relocates socket/spool/state (keep it short: the socket path must fit in 104 bytes). `AGENTSCOPE_MOCK=1` shows the design's mock data in the popover.

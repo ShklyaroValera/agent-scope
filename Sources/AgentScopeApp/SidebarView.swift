@@ -6,7 +6,7 @@ struct SidebarView: View {
 
     var body: some View {
         let store = model.activeStore
-        let states = GraphBuilder.order(Array(store.sessions.values))
+        let states = EventStore.inboxOrder(Array(store.sessions.values))
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(alignment: .leading, spacing: 4) {
                 Text("SESSIONS · \(states.count)")
@@ -81,23 +81,28 @@ private struct SidebarRow: View {
 
     private var subtitle: String {
         let session = state.session
+        if let warning = session.warning { return "⚠ \(warning)" }
         switch session.status {
         case .needsYou:
             return "Needs you · permission"
+        case .yourTurn:
+            return "Your turn · \(Format.elapsed(now.timeIntervalSince(session.waitingSince ?? session.lastEventAt))) · \(session.place)"
         case .idle:
-            return "\(session.project) · \(state.ended ? "ended" : "idle") \(Format.elapsed(now.timeIntervalSince(session.lastEventAt)))"
+            return "\(session.place) · \(state.ended ? "ended" : "idle") \(Format.elapsed(now.timeIntervalSince(session.lastEventAt)))"
         default:
             let subagents = state.activeSubagents.count
-            if subagents > 0 { return "\(session.project) · \(subagents) subagent\(subagents == 1 ? "" : "s")" }
+            if subagents > 0 { return "\(session.place) · \(subagents) subagent\(subagents == 1 ? "" : "s")" }
             let activity = state.activity
-            return activity.isEmpty ? session.project : "\(session.project) · \(activity)"
+            return activity.isEmpty ? session.place : "\(session.place) · \(activity)"
         }
     }
 
     private var subtitleColor: Color {
-        switch state.session.status {
+        if state.session.warning != nil { return Palette.needsYouText }
+        return switch state.session.status {
         case .needsYou: Palette.needsYouText
         case .failed: Palette.failedText
+        case .yourTurn: Palette.answeredText
         case .idle: Palette.textTertiary
         default: Palette.textSecondary
         }
@@ -107,9 +112,14 @@ private struct SidebarRow: View {
         state.session.status == .idle ? Color(hex: 0xA1A1A6) : Palette.edge(state.session.status)
     }
 
+    private var backgroundTint: Color? {
+        state.session.status == .yourTurn ? Palette.answer.opacity(0.10) : nil
+    }
+
     private var background: Color {
         if selected { return Palette.sidebarSelected }
         if state.session.status == .needsYou { return Palette.needsYouRow }
+        if let tint = backgroundTint { return tint }
         return .clear
     }
 }

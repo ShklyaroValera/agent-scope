@@ -7,9 +7,14 @@ import UserNotifications
 @MainActor
 final class Notifier: NSObject, UNUserNotificationCenterDelegate {
     var onJump: ((String) -> Void)?
+    var onDecide: ((String, Bool) -> Void)?
     private var notified = Set<String>()
+    private var stuckNotified = Set<String>()
     private static let category = "agent"
+    private static let decideCategory = "decide"
     private static let jumpAction = "jump"
+    private static let allowAction = "allow"
+    private static let denyAction = "deny"
 
     /// Notifications need a bundle identifier; `swift run` binaries have none.
     private var center: UNUserNotificationCenter? {
@@ -20,36 +25,57 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         guard let center else { return }
         center.delegate = self
         let jump = UNNotificationAction(identifier: Self.jumpAction, title: "Jump to", options: [.foreground])
-        center.setNotificationCategories([UNNotificationCategory(identifier: Self.category, actions: [jump], intentIdentifiers: [])])
+        let allow = UNNotificationAction(identifier: Self.allowAction, title: "Allow", options: [])
+        let deny = UNNotificationAction(identifier: Self.denyAction, title: "Deny", options: [.destructive])
+        center.setNotificationCategories([
+            UNNotificationCategory(identifier: Self.category, actions: [jump], intentIdentifiers: []),
+            UNNotificationCategory(identifier: Self.decideCategory, actions: [allow, deny, jump], intentIdentifiers: []),
+        ])
         center.requestAuthorization(options: [.alert, .sound]) { _, _ in }
     }
 
-    func needsYou(_ pending: [PendingDecision]) {
+    /// One notification per request; with Allow/Deny buttons when the hook waits for an answer.
+    func needsYou(_ pending: [PendingDecision], decidable: Set<String>) {
         for decision in pending where !notified.contains(decision.id) {
             notified.insert(decision.id)
             post(
                 id: decision.id, sessionId: decision.sessionId,
                 title: "\(decision.agent.displayName) needs you",
                 body: "\(decision.summary) · \(decision.project)",
-                sound: true
+                sound: true, category: decidable.contains(decision.id) ? Self.decideCategory : Self.category
             )
         }
         if notified.count > 500 { notified.removeAll() }
     }
 
-    func finished(_ session: Session) {
+    /// "Codex finished · rn-app · 4m · 23 calls · 1 failed".
+    func finished(_ session: Session, turn: (duration: TimeInterval, calls: Int, failed: Int)?) {
+        var parts = [session.place]
+        if let turn {
+            parts.append(Format.elapsed(turn.duration))
+            parts.append("\(turn.calls) call\(turn.calls == 1 ? "" : "s")")
+            if turn.failed > 0 { parts.append("\(turn.failed) failed") }
+        }
         post(
             id: "finished-\(session.id)-\(Int(session.lastEventAt.timeIntervalSince1970))", sessionId: session.id,
-            title: "\(session.agent.displayName) finished", body: session.project, sound: false
+            title: "\(session.agent.displayName) finished", body: parts.joined(separator: " · "), sound: false
         )
     }
 
-    private func post(id: String, sessionId: String, title: String, body: String, sound: Bool) {
+    /// Once per session and kind of problem (loop, long call, silence).
+    func stuck(_ session: Session, warning: String) {
+        let key = "\(session.id)|\(warning.prefix(12))"
+        guard !stuckNotified.contains(key) else { return }
+        stuckNotified.insert(key)
+        post(id: "stuck-\(key)", sessionId: session.id, title: "\(session.agent.displayName) looks stuck", body: "\(warning) · \(session.place)", sound: true)
+    }
+
+    private func post(id: String, sessionId: String, title: String, body: String, sound: Bool, category: String = Notifier.category) {
         guard let center else { return }
         let content = UNMutableNotificationContent()
         content.title = title
         content.body = body
-        content.categoryIdentifier = Self.category
+        content.categoryIdentifier = category
         content.userInfo = ["sessionId": sessionId]
         if sound { content.sound = .default }
         center.add(UNNotificationRequest(identifier: id, content: content, trigger: nil))
@@ -59,8 +85,15 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         _ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         let sessionId = response.notification.request.content.userInfo["sessionId"] as? String
+        let action = response.actionIdentifier
         if let sessionId {
-            Task { @MainActor in self.onJump?(sessionId) }
+            Task { @MainActor in
+                switch action {
+                case Self.allowAction: self.onDecide?(sessionId, true)
+                case Self.denyAction: self.onDecide?(sessionId, false)
+                default: self.onJump?(sessionId)
+                }
+            }
         }
         completionHandler()
     }

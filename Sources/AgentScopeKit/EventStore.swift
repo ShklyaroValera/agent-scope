@@ -39,6 +39,7 @@ public struct SessionState: Sendable, Equatable {
     public var launcher: Launcher?
     /// The agent process's start time, to tell it from a later process that reuses the pid.
     public var pidStart: Double?
+    public var turnStartedAt: Date?
     public var turnFinishedAt: Date?
 
     public var mainNodeId: String { SessionState.nodeId(session: session.id, agentId: nil) }
@@ -51,6 +52,14 @@ public struct SessionState: Sendable, Equatable {
 
     static func nodeId(session: String, agentId: String?) -> String {
         "\(session)/\(agentId ?? "main")"
+    }
+
+    /// The last finished turn: how long it took, how many calls, how many failed.
+    public var lastTurn: (duration: TimeInterval, calls: Int, failed: Int)? {
+        guard let finished = turnFinishedAt else { return nil }
+        let start = turnStartedAt ?? session.startedAt
+        let calls = self.calls.filter { $0.startedAt >= start && $0.startedAt <= finished }
+        return (finished.timeIntervalSince(start), calls.count, calls.filter { $0.status == .failed }.count)
     }
 
     /// The popover's one-line description; empty while idle after a turn.
@@ -97,6 +106,12 @@ public final class EventStore {
     /// while a tool call is still running.
     public var hostedQuietLimit: TimeInterval = 2 * 60
     public var hostedQuietLimitDuringCall: TimeInterval = 5 * 60
+    /// Stuck detection: a call running longer than this, or a working agent silent this long.
+    public var longCallLimit: TimeInterval = 10 * 60
+    public var silentLimit: TimeInterval = 5 * 60
+    /// The same call failing this many times in a row counts as a loop.
+    public var loopFailures = 3
+    @ObservationIgnored public var gitLookup: (String) -> GitInfo? = GitInfo.lookup
 
 
     @ObservationIgnored private var callStarts: [Date] = []
@@ -126,6 +141,10 @@ public final class EventStore {
             )],
             calls: []
         )
+        if sessions[event.sessionId] == nil, let git = gitLookup(event.cwd) {
+            state.session.repo = git.repo
+            state.session.branch = git.branch
+        }
         state.session.lastEventAt = max(state.session.lastEventAt, event.ts)
         if case .sessionStarted(source: "transcript") = event.kind {} else { state.transcriptOnly = false }
         if let pid = event.pid, state.session.pid != pid {
@@ -154,6 +173,7 @@ public final class EventStore {
 
         case .promptSubmitted:
             state.ended = false
+            state.turnStartedAt = event.ts
             state.turnActive = true
             state.failedTool = nil
             log("prompt submitted", .working)
@@ -285,8 +305,10 @@ public final class EventStore {
                     project: state.session.project, message: "waiting for permission: \(pending.summary)", status: .needsYou
                 ))
             }
+            state.session.warning = warning(for: state, now: now)
             updateStatus(&state, now: now)
-            if (state.ended && quiet > endedRetention) || (state.session.status == .idle && quiet > removeAfter) {
+            let resting = state.session.status == .idle || state.session.status == .yourTurn
+            if (state.ended && quiet > endedRetention) || (resting && quiet > removeAfter) {
                 sessions[id] = nil
             } else if state != original {
                 // Only real changes reach observers; an unchanged write would redraw every view each second.
@@ -295,9 +317,42 @@ public final class EventStore {
         }
     }
 
+    /// Signs that a working agent is stuck: the same call failing in a row, a call that does not end,
+    /// or silence while it should be working.
+    func warning(for state: SessionState, now: Date) -> String? {
+        guard !state.ended, state.turnActive else { return nil }
+        for node in state.nodes {
+            let recent = state.calls.filter { $0.agentNodeId == node.id }.suffix(loopFailures)
+            if recent.count == loopFailures, recent.allSatisfy({ $0.status == .failed }),
+               Set(recent.map { "\($0.tool)|\($0.summary)" }).count == 1, let call = recent.last {
+                return "Looping: \(ToolSummary.displayName(call.tool)) failed \(loopFailures)× in a row"
+            }
+        }
+        if let call = state.calls.first(where: { $0.finishedAt == nil && now.timeIntervalSince($0.startedAt) > longCallLimit }) {
+            let label = call.summary.isEmpty ? ToolSummary.displayName(call.tool) : "\(ToolSummary.displayName(call.tool)) \(call.summary)"
+            return "\(Format.truncated(label, to: 40)) running for \(Format.elapsed(now.timeIntervalSince(call.startedAt)))"
+        }
+        let quiet = now.timeIntervalSince(state.session.lastEventAt)
+        if state.session.pid != nil, !state.transcriptOnly, quiet > silentLimit {
+            return "No activity for \(Format.elapsed(quiet))"
+        }
+        return nil
+    }
+
+    public func refreshGit() {
+        for (id, var state) in sessions {
+            let git = gitLookup(state.session.cwd.path)
+            guard git?.repo != state.session.repo || git?.branch != state.session.branch else { continue }
+            state.session.repo = git?.repo
+            state.session.branch = git?.branch
+            sessions[id] = state
+        }
+    }
+
     private func quietLimit(_ state: SessionState) -> TimeInterval {
         if state.transcriptOnly { return Self.transcriptActivityWindow }
-        guard state.session.pid == nil else { return staleAfter }
+        // With a live process of its own, a long-running call is still work (stuck detection reports it).
+        guard state.session.pid == nil else { return state.calls.contains { $0.finishedAt == nil } ? .infinity : staleAfter }
         return state.calls.contains { $0.finishedAt == nil } ? hostedQuietLimitDuringCall : hostedQuietLimit
     }
 
@@ -331,6 +386,15 @@ public final class EventStore {
         }
     }
 
+    /// The user answered the request from AgentScope; the agent goes on without waiting for its events.
+    public func resolvePending(sessionId: String) {
+        guard var state = sessions[sessionId], state.pending != nil else { return }
+        state.pending = nil
+        state.pendingVisibleAt = nil
+        updateStatus(&state, now: Date())
+        sessions[sessionId] = state
+    }
+
     /// Moves a session's start back to its transcript's first entry (the app may have started later).
     public func adjustStart(sessionId: String, to date: Date) {
         guard var state = sessions[sessionId], date < state.session.startedAt else { return }
@@ -342,12 +406,34 @@ public final class EventStore {
         callStarts.filter { now.timeIntervalSince($0) <= 60 }.count
     }
 
+    /// Inbox order: what needs you first, then agents waiting for a prompt (longest first), failures,
+    /// work in progress, and idle sessions last.
+    public static func inboxOrder(_ states: [SessionState]) -> [SessionState] {
+        func rank(_ status: NodeStatus) -> Int {
+            switch status {
+            case .needsYou: 0
+            case .yourTurn: 1
+            case .failed: 2
+            case .working, .answered: 3
+            case .idle: 4
+            }
+        }
+        return states.sorted { a, b in
+            let (ra, rb) = (rank(a.session.status), rank(b.session.status))
+            if ra != rb { return ra < rb }
+            switch a.session.status {
+            case .needsYou: return (a.pendingSince ?? .distantPast) < (b.pendingSince ?? .distantPast)
+            case .yourTurn: return (a.session.waitingSince ?? .distantPast) < (b.session.waitingSince ?? .distantPast)
+            case .idle: return a.session.lastEventAt > b.session.lastEventAt
+            default: return a.session.startedAt < b.session.startedAt
+            }
+        }
+    }
+
     public func snapshot(now: Date = Date()) -> DashboardSnapshot {
         let states = Array(sessions.values)
-        let active = states.filter { $0.session.status != .idle }.sorted { $0.session.startedAt < $1.session.startedAt }
-        let idle = states.filter { $0.session.status == .idle }.sorted { $0.session.lastEventAt > $1.session.lastEventAt }
         return DashboardSnapshot(
-            sessions: (active + idle).map { SessionSummary(session: $0.session, activity: $0.activity) },
+            sessions: Self.inboxOrder(states).map { SessionSummary(session: $0.session, activity: $0.activity) },
             pending: states.filter { $0.isPendingVisible(at: now) }.compactMap(\.pending).sorted { $0.id < $1.id },
             today: today,
             callsPerMinute: callsPerMinute(now: now),
@@ -492,9 +578,12 @@ public final class EventStore {
             status = .failed
         } else if state.turnActive || !state.activeSubagents.isEmpty {
             status = .working
+        } else if let finished = state.turnFinishedAt, finished >= (state.turnStartedAt ?? .distantPast), !state.transcriptOnly {
+            status = .yourTurn
         } else {
             status = .idle
         }
+        state.session.waitingSince = status == .yourTurn ? state.turnFinishedAt : nil
         state.session.status = status
         state.nodes[0].status = pendingVisible && state.pendingAgentId != nil ? .working : status
         if let agentId = state.pendingAgentId, pendingVisible,

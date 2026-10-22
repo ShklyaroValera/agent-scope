@@ -22,7 +22,11 @@ public enum AgentKind: String, Codable, Sendable, CaseIterable {
 }
 
 public enum NodeStatus: String, Codable, Sendable {
-    case working, needsYou, answered, failed, idle
+    /// `yourTurn`: the agent finished its turn and waits for your next prompt.
+    case working, needsYou, answered, failed, yourTurn, idle
+
+    /// Not doing anything right now: waiting for a prompt or idle.
+    public var isResting: Bool { self == .idle || self == .yourTurn }
 }
 
 public struct Session: Identifiable, Hashable, Sendable {
@@ -40,6 +44,12 @@ public struct Session: Identifiable, Hashable, Sendable {
     public var contextUsed: Double?
     public var tokens: Int
     public var costUSD: Double?
+    /// Since when the agent has been waiting for the next prompt (status `yourTurn`).
+    public var waitingSince: Date?
+    public var repo: String?
+    public var branch: String?
+    /// "Looping: Bash failed 3×", "Bash running for 12m"… — something looks stuck.
+    public var warning: String?
 
     public init(
         id: String,
@@ -66,6 +76,12 @@ public struct Session: Identifiable, Hashable, Sendable {
         self.contextUsed = contextUsed
         self.tokens = tokens
         self.costUSD = costUSD
+    }
+
+    /// "repo · branch" when in a git repository, else the folder name.
+    public var place: String {
+        guard let repo else { return project }
+        return [repo, branch].compactMap { $0 }.joined(separator: " · ")
     }
 }
 

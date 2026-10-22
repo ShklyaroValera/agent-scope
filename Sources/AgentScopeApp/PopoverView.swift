@@ -115,6 +115,13 @@ struct PopoverView: View {
             .keyboardShortcut("a", modifiers: [.command, .shift])
 
             Button {
+                model.quickSwitcher.show(model: model)
+            } label: {
+                FooterRow(title: "Switch to session…", shortcut: model.settings.switcherShortcut ? "⌃⌥Space" : "")
+            }
+            .buttonStyle(HoverButtonStyle(cornerRadius: 7))
+
+            Button {
                 NSApp.activate(ignoringOtherApps: true)
                 openSettings()
             } label: {
@@ -185,15 +192,21 @@ private struct NeedsYouBanner: View {
                 .foregroundStyle(Palette.textPrimary)
                 .lineLimit(1)
                 .truncationMode(.middle)
+            let deadline = model.decisionDeadline(decision)
             HStack(spacing: 6) {
-                if model.showsDecisionButtons {
+                if deadline != nil {
                     Button("Allow") { model.decide(decision, allow: true) }
                         .buttonStyle(BannerButtonStyle(primary: true))
                     Button("Deny") { model.decide(decision, allow: false) }
                         .buttonStyle(BannerButtonStyle())
                 }
                 Button("Jump to") { model.jump(toSession: decision.sessionId) }
-                    .buttonStyle(BannerButtonStyle(primary: !model.showsDecisionButtons))
+                    .buttonStyle(BannerButtonStyle(primary: deadline == nil))
+            }
+            if let deadline {
+                Text("Claude waits \(max(0, Int(deadline.timeIntervalSinceNow.rounded())))s for your answer here, then asks in the terminal.")
+                    .font(.ui(10))
+                    .foregroundStyle(Palette.textSecondary)
             }
         }
         .padding(.horizontal, 12)
@@ -217,14 +230,14 @@ private struct SessionRow: View {
                     Text(session.agent.displayName)
                         .font(.ui(13, .semibold))
                         .foregroundStyle(summary.isIdle ? Palette.textSecondary : Palette.textPrimary)
-                    Text(session.project)
+                    Text(session.place)
                         .font(.ui(11))
                         .foregroundStyle(summary.isIdle ? Palette.textTertiary : Palette.textSecondary)
                 }
                 .lineLimit(1)
-                Text(summary.activityLine(now: now))
+                Text(session.warning.map { "⚠ \($0)" } ?? summary.activityLine(now: now))
                     .font(.ui(11))
-                    .foregroundStyle(Palette.statusText(session.status))
+                    .foregroundStyle(session.warning != nil ? Palette.needsYouText : Palette.statusText(session.status))
                     .lineLimit(1)
                 if !summary.isIdle, let context = session.contextUsed {
                     ContextBar(fraction: context, color: Palette.agent(session.agent))

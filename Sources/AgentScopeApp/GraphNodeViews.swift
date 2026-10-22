@@ -33,11 +33,12 @@ struct SessionNodeView: View {
             AgentBadge(agent: session.agent, size: 32, dimmed: session.status == .idle)
             VStack(alignment: .leading, spacing: 1) {
                 Text(session.agent.displayName).font(.ui(13, .semibold)).foregroundStyle(Palette.textPrimary)
-                Text([session.model.map(Format.modelName), session.project].compactMap { $0 }.joined(separator: " · "))
+                Text([session.model.map(Format.modelName), session.place].compactMap { $0 }.joined(separator: " · "))
                     .font(.ui(11)).foregroundStyle(Palette.textSecondary)
-                Text(statusLine)
+                Text(session.warning.map { "⚠ \($0)" } ?? statusLine)
                     .font(.ui(10, .semibold))
-                    .foregroundStyle(session.status == .idle ? Palette.textTertiary : Palette.statusText(state.displayStatus))
+                    .foregroundStyle(session.warning != nil ? Palette.needsYouText
+                        : session.status == .idle ? Palette.textTertiary : Palette.statusText(state.displayStatus))
                     .padding(.top, 2)
             }
             .lineLimit(1)
@@ -68,6 +69,8 @@ struct SessionNodeView: View {
         case .needsYou: return "● Needs you"
         case .failed: return "● \(state.activity)"
         case .answered: return "✓ Answered"
+        case .yourTurn:
+            return "● Your turn · \(Format.elapsed(now.timeIntervalSince(session.waitingSince ?? session.lastEventAt)))"
         case .idle:
             return state.ended ? "Ended" : "Idle · \(Format.elapsed(now.timeIntervalSince(session.lastEventAt)))"
         }
@@ -102,7 +105,7 @@ struct SubagentNodeView: View {
         case .answered: "✓ Answered"
         case .needsYou: "● Needs you"
         case .failed: "● Failed"
-        case .idle: "Done"
+        case .idle, .yourTurn: "Done"
         }
     }
 
@@ -185,7 +188,7 @@ struct PermissionCardView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(Palette.codeBackground, in: RoundedRectangle(cornerRadius: 6))
             HStack(spacing: 6) {
-                if model.showsDecisionButtons {
+                if model.decisionDeadline(decision) != nil {
                     Button("Allow") { model.decide(decision, allow: true) }
                         .buttonStyle(BannerButtonStyle(primary: true))
                     Button("Deny") { model.decide(decision, allow: false) }

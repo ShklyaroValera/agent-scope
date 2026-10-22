@@ -100,22 +100,52 @@ public enum SocketClient {
     }
 }
 
+/// The open connection of a request answered later (a permission decision): `send` writes the answer
+/// and closes it. Dropping it unanswered closes it too, and the hook falls back to the agent's own prompt.
+public final class SocketReply: @unchecked Sendable {
+    private let fd: Int32
+    private let lock = NSLock()
+    private var done = false
+
+    init(fd: Int32) {
+        self.fd = fd
+    }
+
+    deinit { finish(nil) }
+
+    public func send(_ data: Data) { finish(data) }
+
+    private func finish(_ data: Data?) {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !done else { return }
+        done = true
+        data?.withUnsafeBytes { _ = Darwin.write(fd, $0.baseAddress!, $0.count) }
+        close(fd)
+    }
+}
+
 /// Listens on a Unix domain socket and hands every received line to `handler`. When the handler returns
-/// data, it is written back and the connection is closed (used by `agentscope status`).
+/// data, it is written back and the connection is closed (used by `agentscope status`). A line that
+/// `holdHandler` accepts keeps its connection open for a later answer.
 public final class SocketServer: @unchecked Sendable {
     public typealias Handler = @Sendable (Data) -> Data?
+    /// Returns a closure that takes over the connection when the line is to be answered later.
+    public typealias HoldHandler = @Sendable (Data) -> (@Sendable (SocketReply) -> Void)?
 
     private let path: String
     private let handler: Handler
+    private let holdHandler: HoldHandler?
     private var listener: Int32 = -1
     private var source: DispatchSourceRead?
     /// Serial: events from different hook processes are handled in arrival order (a late "started" can
     /// otherwise land after its "finished"). Hooks send one small line each, so nothing waits long.
     private let connections = DispatchQueue(label: "agentscope.socket.connections")
 
-    public init(path: String, handler: @escaping Handler) {
+    public init(path: String, handler: @escaping Handler, holdHandler: HoldHandler? = nil) {
         self.path = path
         self.handler = handler
+        self.holdHandler = holdHandler
     }
 
     deinit { stop() }
@@ -160,12 +190,13 @@ public final class SocketServer: @unchecked Sendable {
             setsockopt(client, SOL_SOCKET, SO_NOSIGPIPE, &noSigPipe, socklen_t(MemoryLayout<Int32>.size))
             var timeout = timeval(tv_sec: 2, tv_usec: 0)
             setsockopt(client, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
-            connections.async { [handler] in Self.serve(client, handler: handler) }
+            connections.async { [handler, holdHandler] in Self.serve(client, handler: handler, holdHandler: holdHandler) }
         }
     }
 
-    private static func serve(_ fd: Int32, handler: Handler) {
-        defer { close(fd) }
+    private static func serve(_ fd: Int32, handler: Handler, holdHandler: HoldHandler?) {
+        var held = false
+        defer { if !held { close(fd) } }
         _ = fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK)
         var pending = Data()
         var buffer = [UInt8](repeating: 0, count: 64 * 1024)
@@ -177,6 +208,12 @@ public final class SocketServer: @unchecked Sendable {
             while let newline = pending.firstIndex(of: 0x0A) {
                 let line = pending[pending.startIndex..<newline]
                 pending = pending[(newline + 1)...]
+                if !line.isEmpty, let takeOver = holdHandler?(Data(line)) {
+                    // The reply object owns the descriptor now.
+                    held = true
+                    takeOver(SocketReply(fd: fd))
+                    return
+                }
                 if !line.isEmpty, let response = handler(Data(line)) {
                     response.withUnsafeBytes { _ = Darwin.write(fd, $0.baseAddress!, $0.count) }
                     return

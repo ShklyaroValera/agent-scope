@@ -8,8 +8,13 @@ A macOS menu bar app and CLI that shows every AI coding agent running on your Ma
   <img src="docs/images/main-window-light.png" width="520" alt="Agent graph window">
 </p>
 
-- **One glance:** the menu bar icon shows how many agents are active, with an orange dot when one waits for your permission and a red dot when a tool call just failed.
-- **Needs you:** a notification and a banner the moment an agent asks for permission. **Jump to** brings its terminal or IDE to the front (and selects the right Terminal / iTerm2 tab).
+- **One glance:** the menu bar icon shows how many agents are working, with an orange dot when one waits for your permission, red when a tool call just failed, green when an agent finished and it's your turn.
+- **Inbox order:** what needs you first, then agents waiting for your next prompt (longest first, "Your turn · waiting 7m"), failures, work in progress.
+- **Needs you:** a notification and a banner the moment an agent asks for permission. **Jump to** brings its terminal or IDE to the front (selects the Terminal / iTerm2 tab, follows tmux panes).
+- **Allow / Deny** (Claude Code, opt-in in Settings): answer the permission prompt from the popover, the graph or the notification; after a short wait Claude asks in the terminal as usual.
+- **Quick switcher:** ⌃⌥Space from any app, type to filter, ↩ jumps to that agent's window.
+- **Looks stuck:** the same call failing in a row, a call running for 10+ minutes, or silence while working gets flagged (and notified).
+- **repo · branch** for every session, worktrees included, so five sessions in one repo stay apart.
 - **Agent graph:** This Mac → sessions → subagents → tool calls, animated as calls go out and answers come back. Click any node for details; pan and zoom.
 - **Spend:** today's tool calls, tokens and estimated cost, overall and per agent.
 - **100 % local.** No network calls, no accounts. Prompt text is never stored.
@@ -80,6 +85,7 @@ Requires macOS 14+ and Swift 6 (Xcode 16 or later).
 ```bash
 swift build && swift test           # library, app and CLI; unit tests
 scripts/integration-test.sh         # fixtures → real hook binary → app → agentscope status
+scripts/allow-deny-e2e.sh           # real Claude Code permission prompt answered through AgentScope (2 short haiku runs)
 scripts/build-app.sh                # build/AgentScope.app (debug, ad-hoc signed)
 AGENTSCOPE_MOCK=1 open build/AgentScope.app   # the design mock data instead of live sessions
 scripts/release.sh                  # universal release zip; signs/notarizes with DEVELOPER_ID / NOTARY_PROFILE
