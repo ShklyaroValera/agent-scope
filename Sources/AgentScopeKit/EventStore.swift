@@ -20,6 +20,8 @@ public struct SessionState: Sendable {
     public var calls: [ToolCall]
     public var pending: PendingDecision?
     public var pendingAgentId: String?
+    public var pendingVisibleAt: Date?
+    var pendingLogged = false
     public var failedTool: String?
     public var retriedAfterFailure = false
     public var turnActive = false
@@ -29,6 +31,11 @@ public struct SessionState: Sendable {
     public var transcriptPath: String?
 
     public var mainNodeId: String { SessionState.nodeId(session: session.id, agentId: nil) }
+
+    /// A pending permission request counts once its grace period is over.
+    public func isPendingVisible(at date: Date) -> Bool {
+        pending != nil && (pendingVisibleAt ?? .distantPast) <= date
+    }
     public var activeSubagents: [AgentNode] { nodes.filter { $0.parentId != nil && ($0.status == .working || $0.status == .needsYou) } }
 
     static func nodeId(session: String, agentId: String?) -> String {
@@ -37,7 +44,7 @@ public struct SessionState: Sendable {
 
     /// The popover's one-line description; empty while idle after a turn.
     public var activity: String {
-        if pending != nil { return "Waiting for permission" }
+        if session.status == .needsYou { return "Waiting for permission" }
         if ended { return "Session ended" }
         let subagents = activeSubagents.count
         let suffix = subagents > 0 ? " · \(subagents) subagent\(subagents == 1 ? "" : "s")" : ""
@@ -114,6 +121,7 @@ public final class EventStore {
             case .promptSubmitted, .turnFinished, .sessionEnded: state.pending = nil
             default: if event.kind.agentId == state.pendingAgentId { state.pending = nil }
             }
+            if state.pending == nil { state.pendingVisibleAt = nil }
         }
 
         let project = state.session.project
@@ -124,7 +132,7 @@ public final class EventStore {
         switch event.kind {
         case .sessionStarted(let source):
             state.ended = false
-            log(source == "resume" ? "session resumed" : "session started", .working)
+            log(source == "resume" ? "session resumed" : source == "transcript" ? "session found in transcripts" : "session started", .working)
 
         case .promptSubmitted:
             state.ended = false
@@ -136,9 +144,15 @@ public final class EventStore {
             state.turnActive = true
             if state.failedTool != nil { state.retriedAfterFailure = true }
             let nodeId = ensureNode(for: tool, in: &state)
-            if !state.calls.contains(where: { $0.id == tool.id }) {
+            let existing = state.calls.last { $0.id == tool.id || $0.id.hasPrefix(tool.id + "#") }
+            let id: String? = switch existing {
+            case nil: tool.id
+            case let call? where tool.reusableId && call.finishedAt != nil: "\(tool.id)#\(state.calls.count)"
+            default: nil
+            }
+            if let id {
                 state.calls.append(ToolCall(
-                    id: tool.id, agentNodeId: nodeId, tool: tool.tool, summary: tool.summary,
+                    id: id, agentNodeId: nodeId, tool: tool.tool, summary: tool.summary,
                     startedAt: event.ts, status: .working
                 ))
                 if isToday { today.toolCalls += 1 }
@@ -163,7 +177,9 @@ public final class EventStore {
                 sessionId: event.sessionId, agent: event.agent, project: project, summary: summary
             )
             state.pendingAgentId = info.agentId
-            log("waiting for permission: \(summary)", .needsYou)
+            state.pendingVisibleAt = event.ts.addingTimeInterval(info.grace)
+            state.pendingLogged = info.grace <= 0
+            if state.pendingLogged { log("waiting for permission: \(summary)", .needsYou) }
 
         case .subagentStarted(let id, let type):
             let nodeId = SessionState.nodeId(session: event.sessionId, agentId: id)
@@ -193,13 +209,14 @@ public final class EventStore {
             state.ended = true
             state.turnActive = false
             state.pending = nil
+            state.pendingVisibleAt = nil
             for index in state.nodes.indices { state.nodes[index].status = .idle }
             for call in state.calls where call.finishedAt == nil { closeCalls(of: call.agentNodeId, at: event.ts, in: &state) }
             log("session ended", .idle)
         }
 
         if state.calls.count > callsPerSession { state.calls.removeFirst(state.calls.count - callsPerSession) }
-        updateStatus(&state)
+        updateStatus(&state, now: event.ts)
         sessions[event.sessionId] = state
     }
 
@@ -219,7 +236,14 @@ public final class EventStore {
                 state.turnActive = false
                 for index in state.nodes.indices where state.nodes[index].parentId != nil { state.nodes[index].status = .idle }
             }
-            updateStatus(&state)
+            if let pending = state.pending, !state.pendingLogged, state.isPendingVisible(at: now) {
+                state.pendingLogged = true
+                addFeed(FeedItem(
+                    id: 0, ts: state.pendingVisibleAt ?? now, agent: state.session.agent, sessionId: id,
+                    project: state.session.project, message: "waiting for permission: \(pending.summary)", status: .needsYou
+                ))
+            }
+            updateStatus(&state, now: now)
             if (state.ended && quiet > endedRetention) || (state.session.status == .idle && quiet > removeAfter) {
                 sessions[id] = nil
             } else {
@@ -238,7 +262,7 @@ public final class EventStore {
         let idle = states.filter { $0.session.status == .idle }.sorted { $0.session.lastEventAt > $1.session.lastEventAt }
         return DashboardSnapshot(
             sessions: (active + idle).map { SessionSummary(session: $0.session, activity: $0.activity) },
-            pending: states.compactMap(\.pending).sorted { $0.id < $1.id },
+            pending: states.filter { $0.isPendingVisible(at: now) }.compactMap(\.pending).sorted { $0.id < $1.id },
             today: today,
             callsPerMinute: callsPerMinute(now: now)
         )
@@ -251,11 +275,27 @@ public final class EventStore {
             today.costUSD += costUSD ?? 0
         }
         guard var state = sessions[sessionId] else { return }
+        // Transcript activity keeps sessions without hooks listed.
+        if date > state.session.lastEventAt, date <= Date() { state.session.lastEventAt = date }
         state.session.tokens += tokens
         if let costUSD { state.session.costUSD = (state.session.costUSD ?? 0) + costUSD }
         if let contextUsed { state.session.contextUsed = contextUsed }
         if let model { state.session.model = model; state.nodes[0].model = model }
         sessions[sessionId] = state
+    }
+
+    /// A session known only from its transcript.
+    public func discovered(_ found: DiscoveredSession) {
+        guard sessions[found.sessionId] == nil else { return }
+        apply(AgentEvent(
+            ts: found.lastModified, agent: found.agent, sessionId: found.sessionId, cwd: found.cwd,
+            transcriptPath: found.path, kind: .sessionStarted(source: "transcript")
+        ))
+    }
+
+    public func removeSession(_ sessionId: String) {
+        sessions[sessionId] = nil
+        feed.removeAll { $0.sessionId == sessionId }
     }
 
     public func restore(today stats: DailyStats, dayStart: Date) {
@@ -283,10 +323,14 @@ public final class EventStore {
     }
 
     private func finish(_ tool: ToolEvent, at date: Date, status: NodeStatus, error: String?, in state: inout SessionState) {
-        if let index = state.calls.firstIndex(where: { $0.id == tool.id }) {
+        let matches = { (call: ToolCall) in call.id == tool.id || call.id.hasPrefix(tool.id + "#") }
+        if let index = state.calls.lastIndex(where: { matches($0) && $0.finishedAt == nil })
+            ?? (tool.reusableId ? nil : state.calls.lastIndex(where: matches)) {
             state.calls[index].finishedAt = date
             state.calls[index].status = status
             state.calls[index].error = error
+        } else if state.calls.contains(where: matches) {
+            // A repeated "finished" for a call already closed.
         } else {
             // Hooks can arrive out of order; record the call anyway.
             state.calls.append(ToolCall(
@@ -303,11 +347,12 @@ public final class EventStore {
         }
     }
 
-    private func updateStatus(_ state: inout SessionState) {
+    private func updateStatus(_ state: inout SessionState, now: Date) {
+        let pendingVisible = state.isPendingVisible(at: now)
         let status: NodeStatus
         if state.ended {
             status = .idle
-        } else if state.pending != nil {
+        } else if pendingVisible {
             status = .needsYou
         } else if state.failedTool != nil {
             status = .failed
@@ -317,8 +362,8 @@ public final class EventStore {
             status = .idle
         }
         state.session.status = status
-        state.nodes[0].status = state.pending != nil && state.pendingAgentId != nil ? .working : status
-        if let agentId = state.pendingAgentId, state.pending != nil,
+        state.nodes[0].status = pendingVisible && state.pendingAgentId != nil ? .working : status
+        if let agentId = state.pendingAgentId, pendingVisible,
            let index = state.nodes.firstIndex(where: { $0.id == SessionState.nodeId(session: state.session.id, agentId: agentId) }) {
             state.nodes[index].status = .needsYou
         }

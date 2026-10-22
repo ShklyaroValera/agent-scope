@@ -84,3 +84,13 @@ public enum ConfigFile {
         return "'" + path.replacingOccurrences(of: "'", with: #"'\''"#) + "'"
     }
 }
+
+public enum SetupError: Error, CustomStringConvertible {
+    case notAnObject(URL)
+
+    public var description: String {
+        switch self {
+        case .notAnObject(let url): "\(url.path) is not a JSON object; leaving it alone."
+        }
+    }
+}

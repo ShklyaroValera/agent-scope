@@ -1,0 +1,15 @@
+{
+  "hook_event_name": "PostToolUse",
+  "session_id": "aa721121-5828-414c-9d03-aafd4850519c",
+  "timestamp": "2026-10-22T14:09:04.931Z",
+  "cwd": "/Users/me/dev/demo",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "false",
+    "description": "Run false command"
+  },
+  "tool_result": {
+    "result_type": "success",
+    "text_result_for_llm": "\n<shellId: 1 completed with exit code 1>"
+  }
+}

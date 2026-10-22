@@ -1,0 +1,11 @@
+{
+  "hook_event_name": "PostToolUseFailure",
+  "session_id": "aa721121-5828-414c-9d03-aafd4850519c",
+  "timestamp": "2026-10-22T14:08:52.399Z",
+  "cwd": "/Users/me/dev/demo",
+  "tool_name": "Read",
+  "tool_input": {
+    "path": "/Users/me/dev/demo/does-not-exist.txt"
+  },
+  "error": "Path does not exist"
+}

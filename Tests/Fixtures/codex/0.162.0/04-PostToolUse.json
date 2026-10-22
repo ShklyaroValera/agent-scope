@@ -1,0 +1,15 @@
+{
+  "session_id": "01a163fd-6c3a-75a1-8f64-710632dd1f2f",
+  "turn_id": "01a163fd-6c7d-7023-82d0-1d7bb9182cea",
+  "transcript_path": "/tmp/scratch",
+  "cwd": "/Users/me/dev/demo",
+  "hook_event_name": "PostToolUse",
+  "model": "gpt-6.1-sol",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls -la"
+  },
+  "tool_response": "total 8\ndrwxr-xr-x@  4 me  wheel  128 Oct 22 17:11 .\ndrwx------@ 13 me  wheel  416 Oct 22 17:16 ..\ndrwxr-xr-x@  9 me  wheel  288 Oct 22 17:21 .git\n-rw-r--r--@  1 me  wheel   14 Oct 22 17:21 notes.txt\n",
+  "tool_use_id": "exec-919741b5-7044-4650-aecf-9c533d695227"
+}

@@ -18,13 +18,6 @@ public protocol AgentConfigurator: Sendable {
 
 public enum Configurators {
     public static func all(home: URL = URL(fileURLWithPath: NSHomeDirectory())) -> [any AgentConfigurator] {
-        [ClaudeConfigurator(home: home)]
+        [ClaudeConfigurator(home: home), CodexConfigurator(home: home), CopilotConfigurator(home: home)]
     }
-}
-
-extension ClaudeConfigurator: AgentConfigurator {
-    public var agent: AgentKind { .claude }
-    public var configFile: URL { settingsFile }
-    public var setupNote: String? { nil }
-    public var expectedEvents: Set<String> { Set(Self.events) }
 }

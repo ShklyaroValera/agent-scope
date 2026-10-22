@@ -1,0 +1,15 @@
+{
+  "session_id": "01a163fd-6c3a-75a1-8f64-710632dd1f2f",
+  "turn_id": "01a163fd-6c7d-7023-82d0-1d7bb9182cea",
+  "transcript_path": "/tmp/scratch",
+  "cwd": "/Users/me/dev/demo",
+  "hook_event_name": "PostToolUse",
+  "model": "gpt-6.1-sol",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "apply_patch",
+  "tool_input": {
+    "command": "*** Begin Patch\n*** Update File: /Users/me/dev/demo/notes.txt\n@@\n hello fixture\n+bye\n*** End Patch"
+  },
+  "tool_response": "Exit code: 0\nWall time: 0 seconds\nOutput:\nSuccess. Updated the following files:\nM /Users/me/dev/demo/notes.txt\n",
+  "tool_use_id": "exec-c8e97947-34a0-40a0-8933-e4da1e756b30"
+}

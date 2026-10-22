@@ -24,4 +24,6 @@ public struct AgentScopePaths: Sendable {
     public var rawPayloads: URL { root.appending(path: "payloads") }
     public var dailyStats: URL { root.appending(path: "stats.json") }
     public var settings: URL { root.appending(path: "settings.json") }
+    /// Editable per-model prices for cost estimates.
+    public var prices: URL { root.appending(path: "prices.json") }
 }

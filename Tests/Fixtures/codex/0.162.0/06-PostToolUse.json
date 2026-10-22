@@ -1,0 +1,15 @@
+{
+  "session_id": "01a163fd-6c3a-75a1-8f64-710632dd1f2f",
+  "turn_id": "01a163fd-6c7d-7023-82d0-1d7bb9182cea",
+  "transcript_path": "/tmp/scratch",
+  "cwd": "/Users/me/dev/demo",
+  "hook_event_name": "PostToolUse",
+  "model": "gpt-6.1-sol",
+  "permission_mode": "bypassPermissions",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "cat notes.txt"
+  },
+  "tool_response": "hello fixture\n",
+  "tool_use_id": "exec-c841c298-6017-4af4-96dc-2c6d39958379"
+}

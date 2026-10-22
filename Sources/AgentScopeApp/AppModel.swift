@@ -23,6 +23,9 @@ final class AppModel {
     @ObservationIgnored private var server: SocketServer?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private lazy var mockStore = EventStore.mock()
+    @ObservationIgnored private let transcripts = TranscriptMonitor()
+    @ObservationIgnored private let transcriptQueue = DispatchQueue(label: "agentscope.transcripts", qos: .utility)
+    @ObservationIgnored private var ticks = 0
 
     /// The store the main window draws: live, or the design mock.
     var activeStore: EventStore { useMockData ? mockStore : store }
@@ -58,8 +61,57 @@ final class AppModel {
         }
 
         replaySpool()
-        timer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.store.tick() }
+        loadPrices()
+        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated { self?.everySecond() }
+        }
+    }
+
+    private func everySecond() {
+        store.tick()
+        ticks += 1
+        if ticks % 2 == 0 { pollTranscripts(discover: ticks % 20 == 0 || ticks == 2) }
+    }
+
+    func loadPrices() {
+        if !FileManager.default.fileExists(atPath: paths.prices.path) {
+            try? Data(PriceTable.defaults.json.formatted().utf8).write(to: paths.prices)
+        }
+        let prices = PriceTable.load(from: paths.prices)
+        transcriptQueue.async { [transcripts] in transcripts.prices = prices }
+    }
+
+    /// Follows the transcripts of known sessions for tokens, context and cost; now and then looks for
+    /// sessions that only have a transcript.
+    private func pollTranscripts(discover: Bool) {
+        let tracked = store.sessions.values.compactMap { state in
+            state.transcriptPath.map { (state.session.id, state.session.agent, $0) }
+        }
+        let live = Set(store.sessions.keys)
+        transcriptQueue.async { [weak self, transcripts] in
+            var replaced: [String] = []
+            for (sessionId, agent, path) in tracked {
+                if let old = transcripts.track(sessionId: sessionId, agent: agent, path: path) { replaced.append(old) }
+            }
+            let found = discover ? transcripts.discover() : []
+            for session in found { transcripts.track(sessionId: session.sessionId, agent: session.agent, path: session.path) }
+            let updates = transcripts.poll()
+            transcripts.retain(sessionIds: live.union(found.map(\.sessionId)))
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    // A transcript-only session turned out to be one the hooks know under another id.
+                    for id in replaced { self.store.removeSession(id) }
+                    found.forEach(self.store.discovered)
+                    for update in updates {
+                        let delta = update.delta
+                        self.store.addUsage(
+                            sessionId: update.sessionId, tokens: delta.tokens, costUSD: delta.costUSD,
+                            contextUsed: delta.contextUsed, model: delta.model, at: delta.ts ?? Date()
+                        )
+                    }
+                }
+            }
         }
     }
 

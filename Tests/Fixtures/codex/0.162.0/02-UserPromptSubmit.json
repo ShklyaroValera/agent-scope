@@ -1,0 +1,10 @@
+{
+  "session_id": "01a163fd-6c3a-75a1-8f64-710632dd1f2f",
+  "turn_id": "01a163fd-6c7d-7023-82d0-1d7bb9182cea",
+  "transcript_path": "/tmp/scratch",
+  "cwd": "/Users/me/dev/demo",
+  "hook_event_name": "UserPromptSubmit",
+  "model": "gpt-6.1-sol",
+  "permission_mode": "bypassPermissions",
+  "prompt": "Do these steps in order, one tool call each, keep replies very short: 1) run shell: ls -la  2) run shell: cat notes.txt  3) run shell: cat does-not-exist.txt (it will fail, expected)  4) use apply_patch to append the line 'bye' to notes.txt  5) run shell: curl -sI https://example.com (network may be blocked, expected). Then say done."
+}

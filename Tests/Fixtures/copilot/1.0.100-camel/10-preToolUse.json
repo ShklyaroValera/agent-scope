@@ -1,0 +1,10 @@
+{
+  "sessionId": "aa721121-5828-414c-9d03-aafd4850519c",
+  "timestamp": 1792678146846,
+  "cwd": "/Users/me/dev/demo",
+  "toolName": "bash",
+  "toolArgs": {
+    "command": "rm notes.txt",
+    "description": "Remove notes.txt"
+  }
+}

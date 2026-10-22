@@ -1,0 +1,11 @@
+{
+  "session_id": "01a163fd-6c3a-75a1-8f64-710632dd1f2f",
+  "turn_id": "01a163fd-6c7d-7023-82d0-1d7bb9182cea",
+  "transcript_path": "/tmp/scratch",
+  "cwd": "/Users/me/dev/demo",
+  "hook_event_name": "Stop",
+  "model": "gpt-6.1-sol",
+  "permission_mode": "bypassPermissions",
+  "stop_hook_active": false,
+  "last_assistant_message": "done"
+}

@@ -1,0 +1,9 @@
+{
+  "sessionId": "aa721121-5828-414c-9d03-aafd4850519c",
+  "timestamp": 1792678130289,
+  "cwd": "/Users/me/dev/demo",
+  "toolName": "view",
+  "toolArgs": {
+    "path": "/Users/me/dev/demo/notes.txt"
+  }
+}

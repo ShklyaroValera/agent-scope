@@ -105,7 +105,8 @@ public enum GraphBuilder {
         )
         // Idle sessions stay compact.
         guard status != .idle else { return item }
-        if let pending = state.pending, state.pendingAgentId == nil {
+        let mainNeedsYou = state.session.status == .needsYou && state.pendingAgentId == nil
+        if let pending = state.pending, mainNeedsYou {
             item.children.append(Item(
                 id: "permission:\(pending.id)", kind: .permission(sessionId: id), status: .needsYou, size: metrics.permission
             ))
@@ -124,7 +125,7 @@ public enum GraphBuilder {
         }
 
         // The permission card already shows the main agent's blocked call.
-        if state.pending == nil || state.pendingAgentId != nil {
+        if !mainNeedsYou {
             let mainCalls = calls(of: state.mainNodeId, in: state, limit: shown.isEmpty ? 2 : 1)
             let mainChain = shown.isEmpty ? mainCalls : mainCalls.filter { $0.finishedAt == nil }
             item.children += chain(mainChain, sessionId: id, now: now, metrics: metrics)

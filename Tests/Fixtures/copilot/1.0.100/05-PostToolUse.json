@@ -1,0 +1,15 @@
+{
+  "hook_event_name": "PostToolUse",
+  "session_id": "aa721121-5828-414c-9d03-aafd4850519c",
+  "timestamp": "2026-10-22T14:08:47.377Z",
+  "cwd": "/Users/me/dev/demo",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "ls -la",
+    "description": "List directory contents"
+  },
+  "tool_result": {
+    "result_type": "success",
+    "text_result_for_llm": "total 8\ndrwxr-xr-x@ 5 me  wheel  160 Oct 22 17:08 .\ndrwx------@ 9 me  wheel  288 Oct 22 17:08 ..\ndrwxr-xr-x@ 9 me  wheel  288 Oct 22 17:08 .git\ndrwxr-xr-x@ 3 me  wheel   96 Oct 22 17:08 .github\n-rw-r--r--@ 1 me  wheel   14 Oct 22 17:08 notes.txt\n<shellId: 0 completed with exit code 0>"
+  }
+}

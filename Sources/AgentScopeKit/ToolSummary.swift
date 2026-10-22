@@ -39,7 +39,7 @@ public enum ToolSummary {
         case "todowrite":
             return input["todos"]?.arrayValue.map { "\($0.count) todos" } ?? ""
         case "apply_patch":
-            return patchedFiles(string("input", "patch") ?? "", cwd: cwd)
+            return patchedFiles(string("input", "patch", "command") ?? "", cwd: cwd)
         default:
             if let path = string("file_path", "path") { return relative(path, to: cwd) }
             return string("command", "description", "query", "pattern", "url", "prompt")

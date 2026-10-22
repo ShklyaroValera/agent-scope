@@ -9,13 +9,16 @@ public struct ToolEvent: Hashable, Sendable {
     /// The subagent that made the call; `nil` for the main agent.
     public var agentId: String?
     public var agentType: String?
+    /// The id is derived from the call's content (Copilot), so a later identical call reuses it.
+    public var reusableId: Bool
 
-    public init(id: String, tool: String, summary: String, agentId: String? = nil, agentType: String? = nil) {
+    public init(id: String, tool: String, summary: String, agentId: String? = nil, agentType: String? = nil, reusableId: Bool = false) {
         self.id = id
         self.tool = tool
         self.summary = summary
         self.agentId = agentId
         self.agentType = agentType
+        self.reusableId = reusableId
     }
 }
 
@@ -24,12 +27,15 @@ public struct NeedsYouInfo: Hashable, Sendable {
     public var tool: String?
     public var summary: String?
     public var agentId: String?
+    /// Seconds to wait before showing it: the agent may resolve the request on its own.
+    public var grace: TimeInterval
 
-    public init(message: String, tool: String? = nil, summary: String? = nil, agentId: String? = nil) {
+    public init(message: String, tool: String? = nil, summary: String? = nil, agentId: String? = nil, grace: TimeInterval = 0) {
         self.message = message
         self.tool = tool
         self.summary = summary
         self.agentId = agentId
+        self.grace = grace
     }
 }
 
