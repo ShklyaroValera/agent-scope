@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>AgentScope install in terminal</title>
+<style>
+body{margin:0;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+a{color:#7FB2FF}a:hover{color:#A9CBFF}
+@keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
+.cursor{animation:blink 1s step-end infinite}
+</style>
+</head>
+<body style="background:#d8d8dc;padding:40px;display:flex;justify-content:center">
+
+<div style="width:720px;height:440px;box-sizing:border-box;background:#1C1C1E;border-radius:12px;border:1px solid #3A3A3C;overflow:hidden;display:flex;flex-direction:column">
+  <div style="height:34px;flex-shrink:0;display:flex;align-items:center;gap:8px;padding:0 14px;background:#2C2C2E;border-bottom:1px solid #3A3A3C">
+    <div style="width:12px;height:12px;border-radius:50%;background:#FF5F57" aria-hidden="true"></div>
+    <div style="width:12px;height:12px;border-radius:50%;background:#FEBC2E" aria-hidden="true"></div>
+    <div style="width:12px;height:12px;border-radius:50%;background:#28C840" aria-hidden="true"></div>
+    <div style="flex-grow:1;text-align:center;font-family:-apple-system,system-ui,sans-serif;font-size:12px;color:#AEAEB2;margin-right:52px">zsh — ~</div>
+  </div>
+  <div style="flex-grow:1;padding:16px 20px;font-size:12.5px;line-height:1.7;color:#E5E5EA">
+    <div><span style="color:#30D158">❯</span> brew install --cask [your-tap]/agentscope</div>
+    <div style="color:#8E8E93">==&gt; Installing AgentScope.app and the agentscope CLI</div>
+    <div style="color:#8E8E93">🍺  agentscope was successfully installed!</div>
+    <div style="height:10px"></div>
+    <div><span style="color:#30D158">❯</span> agentscope setup</div>
+    <div>Detected agents:</div>
+    <div>  <span style="color:#30D158">✓</span> Claude Code   hooks → ~/.claude/settings.json</div>
+    <div>  <span style="color:#30D158">✓</span> Codex         hooks → ~/.codex/hooks.json</div>
+    <div>  <span style="color:#30D158">✓</span> Copilot CLI   hooks → ~/.copilot/hooks/agentscope.json</div>
+    <div>  <span style="color:#FFD60A">!</span> Codex: run <span style="color:#7FB2FF">/hooks</span> once and trust them</div>
+    <div style="height:10px"></div>
+    <div><span style="color:#30D158">❯</span> agentscope status</div>
+    <div>claude   perp-agent   <span style="color:#64A0FF">working</span>    2 subagents   62% ctx</div>
+    <div>codex    rn-app       <span style="color:#FF6961">error</span>      apply_patch   35% ctx</div>
+    <div>copilot  dotfiles     <span style="color:#FFB340">needs you</span>  rm -rf ./build</div>
+    <div><span style="color:#30D158">❯</span> <span class="cursor" style="display:inline-block;width:8px;height:15px;background:#E5E5EA;vertical-align:middle"></span></div>
+  </div>
+</div>
+</body>
+</html>

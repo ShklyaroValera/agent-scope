@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>AgentScope main window</title>
+<style>
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;color:#1D1D1F}
+a{color:#0A64D8}a:hover{color:#084DA8}
+@keyframes flowDown{0%{transform:translateY(0);opacity:0}15%{opacity:1}85%{opacity:1}100%{transform:translateY(64px);opacity:0}}
+@keyframes flowUp{0%{transform:translateY(64px);opacity:0}15%{opacity:1}85%{opacity:1}100%{transform:translateY(0);opacity:0}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(232,137,12,.45)}70%{box-shadow:0 0 0 10px rgba(232,137,12,0)}100%{box-shadow:0 0 0 0 rgba(232,137,12,0)}}
+@keyframes glow{0%,100%{box-shadow:0 0 0 4px rgba(217,119,87,.10),0 4px 14px rgba(0,0,0,.06)}50%{box-shadow:0 0 0 8px rgba(217,119,87,.16),0 4px 14px rgba(0,0,0,.06)}}
+.dot-down{animation:flowDown 1.6s linear infinite}
+.dot-up{animation:flowUp 1.8s linear infinite}
+.pulse{animation:pulse 1.8s ease-out infinite}
+.glow{animation:glow 2.4s ease-in-out infinite}
+</style>
+</head>
+<body style="background:#d8d8dc;padding:40px;display:flex;justify-content:center">
+
+<div style="width:1280px;height:800px;box-sizing:border-box;background:#ECECEE;border-radius:12px;overflow:hidden;border:1px solid #C9C9CE;display:flex;flex-direction:column">
+
+  <!-- Title bar -->
+  <div style="height:52px;flex-shrink:0;display:flex;align-items:center;gap:16px;padding:0 18px;background:#F6F6F7;border-bottom:1px solid #DCDCE0">
+    <div style="display:flex;gap:8px" aria-hidden="true">
+      <div style="width:12px;height:12px;border-radius:50%;background:#FF5F57"></div>
+      <div style="width:12px;height:12px;border-radius:50%;background:#FEBC2E"></div>
+      <div style="width:12px;height:12px;border-radius:50%;background:#28C840"></div>
+    </div>
+    <div style="font-size:13px;font-weight:600;margin-left:8px">AgentScope</div>
+    <div style="font-size:12px;color:#6E6E73">MacBook Pro · local</div>
+    <div style="flex-grow:1"></div>
+    <div style="display:flex;gap:4px;background:#E3E3E7;border-radius:8px;padding:3px">
+      <button type="button" style="border:0;background:#FFFFFF;border-radius:6px;padding:5px 12px;font-size:12px;font-weight:500;color:#1D1D1F;box-shadow:0 1px 2px rgba(0,0,0,.12);font-family:inherit">Graph</button>
+      <button type="button" style="border:0;background:transparent;border-radius:6px;padding:5px 12px;font-size:12px;color:#4A4A4F;font-family:inherit">Timeline</button>
+      <button type="button" style="border:0;background:transparent;border-radius:6px;padding:5px 12px;font-size:12px;color:#4A4A4F;font-family:inherit">Usage</button>
+    </div>
+    <button type="button" aria-label="Settings" style="width:32px;height:32px;border:0;border-radius:8px;background:transparent;display:flex;align-items:center;justify-content:center;color:#4A4A4F">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"></path></svg>
+    </button>
+  </div>
+
+  <div style="flex-grow:1;display:flex;min-height:0">
+
+    <!-- Sidebar -->
+    <div style="width:260px;flex-shrink:0;background:#E9E9EC;border-right:1px solid #D6D6DB;padding:14px 10px;box-sizing:border-box;display:flex;flex-direction:column;gap:4px">
+      <div style="font-size:11px;font-weight:600;color:#6E6E73;padding:4px 10px;letter-spacing:.02em">SESSIONS · 4</div>
+
+      <button type="button" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:0;border-radius:8px;background:#D9D9DE;text-align:left;font-family:inherit;width:100%">
+        <div style="width:26px;height:26px;border-radius:7px;background:#D97757;color:#FFFFFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">CC</div>
+        <div style="flex-grow:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:#1D1D1F">Claude Code</div>
+          <div style="font-size:11px;color:#55555A">perp-agent · 2 subagents</div>
+        </div>
+        <div style="width:8px;height:8px;border-radius:50%;background:#2F6FEB" aria-label="Working"></div>
+      </button>
+
+      <button type="button" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:0;border-radius:8px;background:transparent;text-align:left;font-family:inherit;width:100%">
+        <div style="width:26px;height:26px;border-radius:7px;background:#1D1D1F;color:#FFFFFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">CX</div>
+        <div style="flex-grow:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:#1D1D1F">Codex</div>
+          <div style="font-size:11px;color:#55555A">rn-app · running tests</div>
+        </div>
+        <div style="width:8px;height:8px;border-radius:50%;background:#2F6FEB" aria-label="Working"></div>
+      </button>
+
+      <button type="button" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:0;border-radius:8px;background:#FBEBD5;text-align:left;font-family:inherit;width:100%">
+        <div style="width:26px;height:26px;border-radius:7px;background:#7A4FD6;color:#FFFFFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">CP</div>
+        <div style="flex-grow:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:#1D1D1F">Copilot CLI</div>
+          <div style="font-size:11px;color:#8A4B00">Needs you · permission</div>
+        </div>
+        <div class="pulse" style="width:8px;height:8px;border-radius:50%;background:#E8890C" aria-label="Needs you"></div>
+      </button>
+
+      <button type="button" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border:0;border-radius:8px;background:transparent;text-align:left;font-family:inherit;width:100%">
+        <div style="width:26px;height:26px;border-radius:7px;background:#D97757;color:#FFFFFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;opacity:.55">CC</div>
+        <div style="flex-grow:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:#55555A">Claude Code</div>
+          <div style="font-size:11px;color:#6E6E73">unit-bench · idle 12m</div>
+        </div>
+        <div style="width:8px;height:8px;border-radius:50%;background:#A1A1A6" aria-label="Idle"></div>
+      </button>
+
+      <div style="flex-grow:1"></div>
+
+      <div style="background:#F6F6F7;border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;border:1px solid #DCDCE0">
+        <div style="font-size:11px;font-weight:600;color:#6E6E73;letter-spacing:.02em">TODAY</div>
+        <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#4A4A4F">Tool calls</span><span style="font-weight:600">1 284</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#4A4A4F">Tokens</span><span style="font-weight:600">3.1M</span></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px"><span style="color:#4A4A4F">Est. cost</span><span style="font-weight:600">$4.62</span></div>
+      </div>
+    </div>
+
+    <!-- Main panel -->
+    <div style="flex-grow:1;min-width:0;display:flex;flex-direction:column;background:#F6F6F7">
+
+      <div style="height:56px;flex-shrink:0;display:flex;align-items:center;gap:10px;padding:0 24px;border-bottom:1px solid #E3E3E7">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#2F6FEB" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2.5"></circle><circle cx="19" cy="6" r="2.5"></circle><circle cx="12" cy="18" r="2.5"></circle><path d="M7 7.5l3.5 8.5M17 7.5L13.5 16"></path></svg>
+        <div style="font-size:15px;font-weight:600">Agent graph</div>
+        <div style="flex-grow:1"></div>
+        <div style="display:flex;gap:18px;font-size:12px;color:#55555A">
+          <span><b style="color:#1D1D1F">4</b> sessions</span>
+          <span><b style="color:#1D1D1F">6</b> agents</span>
+          <span><b style="color:#1D1D1F">42</b> calls/min</span>
+          <span><b style="color:#1D1D1F">1</b> needs you</span>
+        </div>
+      </div>
+
+      <!-- Graph -->
+      <div style="height:500px;flex-shrink:0;box-sizing:border-box;padding:20px 20px 0 20px">
+        <div style="position:relative;width:980px;height:480px;background:#FFFFFF;border:1px solid #E3E3E7;border-radius:14px;overflow:hidden">
+          <div style="position:absolute;left:20px;top:0;width:940px;height:480px">
+
+            <!-- connectors: hub -> bus -->
+            <div style="position:absolute;left:469px;top:64px;width:2px;height:36px;background:#D1D1D6"></div>
+            <div style="position:absolute;left:140px;top:99px;width:660px;height:2px;background:#D1D1D6"></div>
+            <div style="position:absolute;left:139px;top:100px;width:2px;height:40px;background:#2F6FEB"></div>
+            <div style="position:absolute;left:469px;top:100px;width:2px;height:40px;background:#2F6FEB"></div>
+            <div style="position:absolute;left:799px;top:100px;width:2px;height:40px;background:#E8890C"></div>
+
+            <!-- Claude branch -->
+            <div style="position:absolute;left:139px;top:210px;width:2px;height:40px;background:#D1D1D6"></div>
+            <div style="position:absolute;left:60px;top:249px;width:160px;height:2px;background:#D1D1D6"></div>
+            <div style="position:absolute;left:59px;top:250px;width:2px;height:40px;background:#22A06B"></div>
+            <div style="position:absolute;left:219px;top:250px;width:2px;height:40px;background:#2F6FEB"></div>
+            <div style="position:absolute;left:59px;top:350px;width:2px;height:70px;background:#22A06B"></div>
+            <div style="position:absolute;left:219px;top:350px;width:2px;height:70px;background:#2F6FEB"></div>
+            <div class="dot-up" style="position:absolute;left:56px;top:352px;width:8px;height:8px;border-radius:50%;background:#22A06B"></div>
+            <div class="dot-down" style="position:absolute;left:216px;top:352px;width:8px;height:8px;border-radius:50%;background:#2F6FEB"></div>
+
+            <!-- Codex branch -->
+            <div style="position:absolute;left:469px;top:210px;width:2px;height:80px;background:#2F6FEB"></div>
+            <div class="dot-down" style="position:absolute;left:466px;top:214px;width:8px;height:8px;border-radius:50%;background:#2F6FEB"></div>
+            <div style="position:absolute;left:469px;top:330px;width:2px;height:90px;background:#D93F3F"></div>
+
+            <!-- Copilot branch -->
+            <div style="position:absolute;left:799px;top:210px;width:2px;height:70px;background:#E8890C"></div>
+
+            <!-- Hub -->
+            <div style="position:absolute;left:385px;top:8px;width:170px;height:56px;box-sizing:border-box;background:#1D1D1F;color:#FFFFFF;border-radius:12px;display:flex;align-items:center;gap:10px;padding:0 14px">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="12" rx="2"></rect><path d="M2 20h20"></path></svg>
+              <div>
+                <div style="font-size:13px;font-weight:600">This Mac</div>
+                <div style="font-size:11px;color:#C7C7CC">3 active · 1 idle</div>
+              </div>
+            </div>
+
+            <!-- Session: Claude Code -->
+            <div class="glow" style="position:absolute;left:55px;top:140px;width:170px;height:70px;box-sizing:border-box;background:#FFFFFF;border:1.5px solid #D97757;border-radius:12px;display:flex;align-items:center;gap:10px;padding:0 12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#D97757;color:#FFFFFF;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">CC</div>
+              <div style="min-width:0">
+                <div style="font-size:13px;font-weight:600">Claude Code</div>
+                <div style="font-size:11px;color:#55555A">Opus · perp-agent</div>
+                <div style="font-size:10px;color:#2F6FEB;font-weight:600;margin-top:2px">● Working · 4m 12s</div>
+              </div>
+            </div>
+
+            <!-- Session: Codex -->
+            <div style="position:absolute;left:385px;top:140px;width:170px;height:70px;box-sizing:border-box;background:#FFFFFF;border:1px solid #D1D1D6;border-radius:12px;display:flex;align-items:center;gap:10px;padding:0 12px;box-shadow:0 4px 14px rgba(0,0,0,.06)">
+              <div style="width:32px;height:32px;border-radius:8px;background:#1D1D1F;color:#FFFFFF;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">CX</div>
+              <div style="min-width:0">
+                <div style="font-size:13px;font-weight:600">Codex</div>
+                <div style="font-size:11px;color:#55555A">GPT · rn-app</div>
+                <div style="font-size:10px;color:#2F6FEB;font-weight:600;margin-top:2px">● Working · 1m 40s</div>
+              </div>
+            </div>
+
+            <!-- Session: Copilot -->
+            <div class="pulse" style="position:absolute;left:715px;top:140px;width:170px;height:70px;box-sizing:border-box;background:#FFF8EE;border:1.5px solid #E8890C;border-radius:12px;display:flex;align-items:center;gap:10px;padding:0 12px">
+              <div style="width:32px;height:32px;border-radius:8px;background:#7A4FD6;color:#FFFFFF;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">CP</div>
+              <div style="min-width:0">
+                <div style="font-size:13px;font-weight:600">Copilot CLI</div>
+                <div style="font-size:11px;color:#55555A">dotfiles</div>
+                <div style="font-size:10px;color:#8A4B00;font-weight:600;margin-top:2px">● Needs you</div>
+              </div>
+            </div>
+
+            <!-- Subagent: Explore -->
+            <div style="position:absolute;left:0px;top:290px;width:120px;height:60px;box-sizing:border-box;background:#FFFFFF;border:1px solid #D1D1D6;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.05)">
+              <div style="font-size:12px;font-weight:600">Explore</div>
+              <div style="font-size:10px;color:#55555A">subagent · Haiku</div>
+              <div style="font-size:10px;color:#1C7A50;font-weight:600">✓ Answered</div>
+            </div>
+
+            <!-- Subagent: Plan -->
+            <div style="position:absolute;left:160px;top:290px;width:120px;height:60px;box-sizing:border-box;background:#FFFFFF;border:1px solid #D1D1D6;border-radius:10px;padding:8px 10px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.05)">
+              <div style="font-size:12px;font-weight:600">Plan</div>
+              <div style="font-size:10px;color:#55555A">subagent · Sonnet</div>
+              <div style="font-size:10px;color:#2F6FEB;font-weight:600">● Calling tool</div>
+            </div>
+
+            <!-- Tools under Claude -->
+            <div style="position:absolute;left:0px;top:420px;width:120px;height:36px;box-sizing:border-box;background:#F2F2F5;border:1px solid #E3E3E7;border-radius:8px;display:flex;align-items:center;gap:6px;padding:0 10px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#1D1D1F">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+              WebSearch
+            </div>
+            <div style="position:absolute;left:160px;top:420px;width:120px;height:36px;box-sizing:border-box;background:#EEF4FF;border:1px solid #C4D7FB;border-radius:8px;display:flex;align-items:center;gap:6px;padding:0 10px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#1D1D1F">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><path d="M14 3v6h6"></path></svg>
+              Read
+            </div>
+
+            <!-- Tool under Codex -->
+            <div style="position:absolute;left:395px;top:290px;width:150px;height:40px;box-sizing:border-box;background:#EEF4FF;border:1px solid #C4D7FB;border-radius:8px;display:flex;align-items:center;gap:6px;padding:0 10px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 17l6-6-6-6M12 19h8"></path></svg>
+              Bash · npm test
+            </div>
+            <div style="position:absolute;left:395px;top:420px;width:150px;height:40px;box-sizing:border-box;background:#FDEEEE;border:1px solid #F3C1C1;border-radius:8px;display:flex;align-items:center;gap:6px;padding:0 10px;font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#9F1F1F">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M15 9l-6 6M9 9l6 6"></path></svg>
+              apply_patch failed
+            </div>
+
+            <!-- Needs-you card under Copilot -->
+            <div style="position:absolute;left:695px;top:280px;width:210px;box-sizing:border-box;background:#FFFFFF;border:1.5px solid #E8890C;border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:8px;box-shadow:0 6px 20px rgba(232,137,12,.18)">
+              <div style="font-size:11px;font-weight:700;color:#8A4B00;letter-spacing:.02em">PERMISSION REQUEST</div>
+              <div style="font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;background:#F6F6F7;border-radius:6px;padding:6px 8px">rm -rf ./build</div>
+              <div style="display:flex;gap:6px">
+                <button type="button" style="flex-grow:1;height:30px;border:0;border-radius:7px;background:#1D1D1F;color:#FFFFFF;font-size:12px;font-weight:600;font-family:inherit">Allow</button>
+                <button type="button" style="flex-grow:1;height:30px;border:1px solid #D1D1D6;border-radius:7px;background:#FFFFFF;color:#1D1D1F;font-size:12px;font-weight:500;font-family:inherit">Deny</button>
+                <button type="button" aria-label="Open terminal" style="width:30px;height:30px;border:1px solid #D1D1D6;border-radius:7px;background:#FFFFFF;display:flex;align-items:center;justify-content:center;color:#1D1D1F">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M10 14L21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path></svg>
+                </button>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </div>
+
+      <!-- Legend -->
+      <div style="height:40px;flex-shrink:0;display:flex;align-items:center;justify-content:center;gap:22px;font-size:11px;color:#55555A">
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:16px;height:2px;background:#2F6FEB"></span>Call</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:16px;height:2px;background:#22A06B"></span>Answer</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:16px;height:2px;background:#E8890C"></span>Needs you</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:16px;height:2px;background:#D93F3F"></span>Failed</span>
+        <span style="display:flex;align-items:center;gap:6px"><span style="width:16px;height:2px;background:#D1D1D6"></span>Idle</span>
+      </div>
+
+      <!-- Activity feed -->
+      <div style="flex-grow:1;margin:0 20px 16px 20px;background:#1D1D1F;border-radius:12px;padding:12px 16px;box-sizing:border-box;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;line-height:1.75;color:#D1D1D6;overflow:hidden">
+        <div><span style="color:#8E8E93">14:02:41</span>  <span style="color:#F0A58A">claude</span>  Plan → Read src/strategy/signals.ts</div>
+        <div><span style="color:#8E8E93">14:02:39</span>  <span style="color:#C7B2F5">copilot</span> <span style="color:#F5B963">waiting for permission: rm -rf ./build</span></div>
+        <div><span style="color:#8E8E93">14:02:36</span>  <span style="color:#E5E5EA">codex</span>   <span style="color:#F28B8B">apply_patch failed: hunk 2 does not apply</span></div>
+        <div><span style="color:#8E8E93">14:02:31</span>  <span style="color:#F0A58A">claude</span>  Explore ✓ returned 8 findings</div>
+      </div>
+
+    </div>
+  </div>
+</div>
+</body>
+</html>

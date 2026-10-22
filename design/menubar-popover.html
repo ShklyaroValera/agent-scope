@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>AgentScope menu bar popover</title>
+<style>
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",system-ui,sans-serif;color:#1D1D1F}
+a{color:#0A64D8}a:hover{color:#084DA8}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(232,137,12,.5)}70%{box-shadow:0 0 0 7px rgba(232,137,12,0)}100%{box-shadow:0 0 0 0 rgba(232,137,12,0)}}
+.pulse{animation:pulse 1.8s ease-out infinite}
+</style>
+</head>
+<body style="background:#d8d8dc;padding:40px;display:flex;justify-content:center">
+
+<div style="width:380px;height:620px;box-sizing:border-box;background:linear-gradient(#7C8FA6,#7C8FA6);display:flex;flex-direction:column;align-items:flex-end;overflow:hidden">
+
+  <!-- Menu bar strip -->
+  <div style="width:100%;height:28px;flex-shrink:0;background:rgba(246,246,247,.82);display:flex;align-items:center;justify-content:flex-end;gap:14px;padding:0 12px;box-sizing:border-box;font-size:12px;color:#1D1D1F">
+    <div style="display:flex;align-items:center;gap:5px;background:rgba(0,0,0,.12);border-radius:5px;padding:2px 7px">
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1D1D1F" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="6" r="2.5"></circle><circle cx="19" cy="6" r="2.5"></circle><circle cx="12" cy="18" r="2.5"></circle><path d="M7 7.5l3.5 8.5M17 7.5L13.5 16"></path></svg>
+      <span style="font-weight:600">3</span>
+      <span class="pulse" style="width:6px;height:6px;border-radius:50%;background:#E8890C"></span>
+    </div>
+    <span>Thu 22 Oct  14:02</span>
+  </div>
+
+  <!-- Popover -->
+  <div style="width:356px;margin:8px 12px 0 0;background:#F6F6F7;border-radius:14px;border:1px solid rgba(0,0,0,.14);box-shadow:0 18px 40px rgba(0,0,0,.28);display:flex;flex-direction:column;overflow:hidden">
+
+    <div style="padding:14px 16px 10px 16px;display:flex;align-items:center;gap:8px">
+      <div style="font-size:14px;font-weight:600">AgentScope</div>
+      <div style="font-size:11px;color:#55555A">live</div>
+      <div style="flex-grow:1"></div>
+      <div style="font-size:11px;color:#55555A"><b style="color:#1D1D1F">42</b> calls/min</div>
+    </div>
+
+    <!-- Needs you banner -->
+    <div style="margin:0 12px 10px 12px;background:#FFF4E5;border:1px solid #F2C68A;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span class="pulse" style="width:8px;height:8px;border-radius:50%;background:#E8890C;flex-shrink:0"></span>
+        <div style="font-size:12px;font-weight:600;color:#6B3A00">Copilot CLI needs you</div>
+      </div>
+      <div style="font-size:11px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:#1D1D1F">rm -rf ./build  ·  dotfiles</div>
+      <div style="display:flex;gap:6px">
+        <button type="button" style="flex-grow:1;height:28px;border:0;border-radius:7px;background:#1D1D1F;color:#FFFFFF;font-size:12px;font-weight:600;font-family:inherit">Allow</button>
+        <button type="button" style="flex-grow:1;height:28px;border:1px solid #D1D1D6;border-radius:7px;background:#FFFFFF;font-size:12px;font-family:inherit;color:#1D1D1F">Deny</button>
+        <button type="button" style="flex-grow:1;height:28px;border:1px solid #D1D1D6;border-radius:7px;background:#FFFFFF;font-size:12px;font-family:inherit;color:#1D1D1F">Jump to</button>
+      </div>
+    </div>
+
+    <div style="font-size:11px;font-weight:600;color:#6E6E73;padding:2px 16px 6px 16px;letter-spacing:.02em">ACTIVE SESSIONS</div>
+
+    <!-- Session rows -->
+    <div style="display:flex;flex-direction:column;padding:0 8px">
+      <button type="button" style="display:flex;align-items:center;gap:10px;padding:8px;border:0;border-radius:8px;background:transparent;text-align:left;font-family:inherit;width:100%">
+        <div style="width:28px;height:28px;border-radius:7px;background:#D97757;color:#FFFFFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">CC</div>
+        <div style="flex-grow:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px"><span style="font-size:13px;font-weight:600;color:#1D1D1F">Claude Code</span><span style="font-size:11px;color:#55555A">perp-agent</span></div>
+          <div style="font-size:11px;color:#2F6FEB">Plan → Read · 2 subagents</div>
+          <div style="height:4px;background:#E3E3E7;border-radius:2px;margin-top:5px"><div style="width:62%;height:4px;background:#D97757;border-radius:2px"></div></div>
+        </div>
+        <div style="font-size:11px;color:#55555A;text-align:right;flex-shrink:0">4m<br>62% ctx</div>
+      </button>
+
+      <button type="button" style="display:flex;align-items:center;gap:10px;padding:8px;border:0;border-radius:8px;background:transparent;text-align:left;font-family:inherit;width:100%">
+        <div style="width:28px;height:28px;border-radius:7px;background:#1D1D1F;color:#FFFFFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">CX</div>
+        <div style="flex-grow:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px"><span style="font-size:13px;font-weight:600;color:#1D1D1F">Codex</span><span style="font-size:11px;color:#55555A">rn-app</span></div>
+          <div style="font-size:11px;color:#B42323">apply_patch failed · retrying</div>
+          <div style="height:4px;background:#E3E3E7;border-radius:2px;margin-top:5px"><div style="width:35%;height:4px;background:#1D1D1F;border-radius:2px"></div></div>
+        </div>
+        <div style="font-size:11px;color:#55555A;text-align:right;flex-shrink:0">1m<br>35% ctx</div>
+      </button>
+
+      <button type="button" style="display:flex;align-items:center;gap:10px;padding:8px;border:0;border-radius:8px;background:transparent;text-align:left;font-family:inherit;width:100%">
+        <div style="width:28px;height:28px;border-radius:7px;background:#7A4FD6;color:#FFFFFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0">CP</div>
+        <div style="flex-grow:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px"><span style="font-size:13px;font-weight:600;color:#1D1D1F">Copilot CLI</span><span style="font-size:11px;color:#55555A">dotfiles</span></div>
+          <div style="font-size:11px;color:#8A4B00">Waiting for permission</div>
+          <div style="height:4px;background:#E3E3E7;border-radius:2px;margin-top:5px"><div style="width:18%;height:4px;background:#7A4FD6;border-radius:2px"></div></div>
+        </div>
+        <div style="font-size:11px;color:#55555A;text-align:right;flex-shrink:0">32s<br>18% ctx</div>
+      </button>
+
+      <button type="button" style="display:flex;align-items:center;gap:10px;padding:8px;border:0;border-radius:8px;background:transparent;text-align:left;font-family:inherit;width:100%">
+        <div style="width:28px;height:28px;border-radius:7px;background:#D97757;color:#FFFFFF;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center;flex-shrink:0;opacity:.5">CC</div>
+        <div style="flex-grow:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:6px"><span style="font-size:13px;font-weight:600;color:#55555A">Claude Code</span><span style="font-size:11px;color:#6E6E73">unit-bench</span></div>
+          <div style="font-size:11px;color:#6E6E73">Idle · finished 12m ago</div>
+        </div>
+      </button>
+    </div>
+
+    <!-- Mini stats -->
+    <div style="display:grid;grid-template-columns:repeat(3, minmax(0, 1fr));gap:8px;margin:10px 12px;">
+      <div style="background:#FFFFFF;border:1px solid #E3E3E7;border-radius:9px;padding:8px 10px"><div style="font-size:10px;color:#55555A">Tool calls</div><div style="font-size:15px;font-weight:600">1 284</div></div>
+      <div style="background:#FFFFFF;border:1px solid #E3E3E7;border-radius:9px;padding:8px 10px"><div style="font-size:10px;color:#55555A">Tokens</div><div style="font-size:15px;font-weight:600">3.1M</div></div>
+      <div style="background:#FFFFFF;border:1px solid #E3E3E7;border-radius:9px;padding:8px 10px"><div style="font-size:10px;color:#55555A">Cost today</div><div style="font-size:15px;font-weight:600">$4.62</div></div>
+    </div>
+
+    <div style="border-top:1px solid #E3E3E7;padding:8px;display:flex;flex-direction:column">
+      <button type="button" style="display:flex;align-items:center;justify-content:space-between;padding:8px;border:0;border-radius:7px;background:#2F6FEB;color:#FFFFFF;font-size:13px;font-weight:500;font-family:inherit"><span>Open Agent Graph</span><span style="font-size:11px;opacity:.85">⌘⇧A</span></button>
+      <button type="button" style="display:flex;align-items:center;justify-content:space-between;padding:8px;border:0;border-radius:7px;background:transparent;color:#1D1D1F;font-size:13px;font-family:inherit"><span>Settings…</span><span style="font-size:11px;color:#6E6E73">⌘,</span></button>
+      <button type="button" style="display:flex;align-items:center;justify-content:space-between;padding:8px;border:0;border-radius:7px;background:transparent;color:#1D1D1F;font-size:13px;font-family:inherit"><span>Quit AgentScope</span><span style="font-size:11px;color:#6E6E73">⌘Q</span></button>
+    </div>
+  </div>
+</div>
+</body>
+</html>
