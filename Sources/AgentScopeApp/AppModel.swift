@@ -2,6 +2,11 @@ import AgentScopeKit
 import Foundation
 import Observation
 
+enum MainTab: String, CaseIterable, Identifiable {
+    case graph = "Graph", timeline = "Timeline", usage = "Usage"
+    var id: String { rawValue }
+}
+
 @MainActor
 @Observable
 final class AppModel {
@@ -9,6 +14,7 @@ final class AppModel {
 
     let store = EventStore()
     var selectedSessionId: String?
+    var tab: MainTab = .graph
     /// Debug: show the design's mock data instead of live sessions (`AGENTSCOPE_MOCK=1`).
     var useMockData = ProcessInfo.processInfo.environment["AGENTSCOPE_MOCK"] == "1"
     private(set) var serverError: String?
@@ -16,6 +22,10 @@ final class AppModel {
     @ObservationIgnored private let paths = AgentScopePaths.default
     @ObservationIgnored private var server: SocketServer?
     @ObservationIgnored private var timer: Timer?
+    @ObservationIgnored private lazy var mockStore = EventStore.mock()
+
+    /// The store the main window draws: live, or the design mock.
+    var activeStore: EventStore { useMockData ? mockStore : store }
 
     /// Allow/Deny need `agentscope hook --decide` (phase 2); until then only the mock shows them.
     var showsDecisionButtons: Bool { useMockData }

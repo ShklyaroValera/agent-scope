@@ -118,3 +118,22 @@ struct BannerButtonStyle: ButtonStyle {
             .contentShape(Rectangle())
     }
 }
+
+extension EnvironmentValues {
+    /// True while `DebugSnapshot` renders views offscreen, where AppKit-backed scroll views come out blank.
+    @Entry var isRenderingSnapshot = false
+}
+
+/// A vertical `ScrollView`, or a plain stack during snapshot rendering.
+struct SnapshotSafeScroll<Content: View>: View {
+    @ViewBuilder let content: Content
+    @Environment(\.isRenderingSnapshot) private var isRenderingSnapshot
+
+    var body: some View {
+        if isRenderingSnapshot {
+            content.frame(minHeight: 0, maxHeight: .infinity, alignment: .top).clipped()
+        } else {
+            ScrollView { content }
+        }
+    }
+}

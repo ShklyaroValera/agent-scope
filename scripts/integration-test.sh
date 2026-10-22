@@ -59,7 +59,7 @@ session = sessions[0]
 assert session["status"] == "needsYou", session
 assert session["project"] == "demo", session
 assert session["activity"] == "Waiting for permission", session
-assert [p["summary"] for p in status["pending"]] == ["Bash rm notes.txt"], status["pending"]
+assert [p["summary"] for p in status["pending"]] == ["rm notes.txt"], status["pending"]
 assert status["today"]["toolCalls"] == 6, status["today"]
 EOF
 

@@ -24,12 +24,11 @@ struct AgentScopeApp: App {
         .menuBarExtraStyle(.window)
 
         Window("Agent Graph", id: AppModel.graphWindowId) {
-            Text("Agent Graph — coming in M2")
-                .foregroundStyle(Palette.textSecondary)
-                .frame(minWidth: 900, minHeight: 600)
+            MainWindow()
                 .environment(model)
         }
-        .defaultSize(width: 1200, height: 780)
+        .defaultSize(width: 1280, height: 800)
+        .keyboardShortcut("a", modifiers: [.command, .shift])
 
         Settings {
             Text("Settings — coming in M4")

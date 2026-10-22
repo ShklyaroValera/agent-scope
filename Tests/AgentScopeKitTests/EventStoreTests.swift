@@ -49,7 +49,7 @@ struct EventStoreTests {
         let (store, _) = try replay(upTo: 15)
         let snapshot = store.snapshot(now: start.addingTimeInterval(15))
         #expect(snapshot.attention == .needsYou)
-        #expect(snapshot.pending.map(\.summary) == ["Bash rm notes.txt"])
+        #expect(snapshot.pending.map(\.summary) == ["rm notes.txt"])
         #expect(store.sessions[sessionId]?.activity == "Waiting for permission")
 
         // The subagent keeps working while main waits: still pending.
@@ -61,10 +61,13 @@ struct EventStoreTests {
         #expect(done.sessions[sessionId]?.pending == nil)
     }
 
-    @Test func subagentGreysOutOnStop() throws {
+    @Test func subagentAnswersOnStopThenGreysAtTurnEnd() throws {
         let (store, _) = try replay(upTo: 18)
         let state = try #require(store.sessions[sessionId])
-        #expect(state.nodes[1].status == .idle)
+        #expect(state.nodes[1].status == .answered)
+        #expect(state.activeSubagents.isEmpty)
+        let (ended, _) = try replay(upTo: 19)
+        #expect(ended.sessions[sessionId]?.nodes[1].status == .idle)
         #expect(state.calls.filter { $0.agentNodeId == state.nodes[1].id }.allSatisfy { $0.finishedAt != nil })
     }
 
@@ -77,7 +80,7 @@ struct EventStoreTests {
         #expect(state.calls.allSatisfy { $0.finishedAt != nil })
         #expect(store.today.toolCalls == 7)
         #expect(store.feed.first?.message == "session ended")
-        #expect(store.feed.contains { $0.status == .failed && $0.message.hasPrefix("Bash false failed") })
+        #expect(store.feed.contains { $0.status == .failed && $0.message == "Bash failed: Exit code 1" })
     }
 
     @Test func endedSessionsAgeOut() throws {
@@ -119,5 +122,13 @@ struct EventStoreTests {
         #expect(decoded.sessions.map(\.activity) == snapshot.sessions.map(\.activity))
         #expect(decoded.pending == snapshot.pending)
         #expect(decoded.today == snapshot.today)
+    }
+
+    @Test func feedIsOrderedByEventTime() {
+        let store = EventStore(now: start)
+        store.apply(AgentEvent(ts: start.addingTimeInterval(10), agent: .claude, sessionId: "a", cwd: "/a", kind: .promptSubmitted))
+        store.apply(AgentEvent(ts: start.addingTimeInterval(5), agent: .codex, sessionId: "b", cwd: "/b", kind: .promptSubmitted))
+        store.apply(AgentEvent(ts: start.addingTimeInterval(20), agent: .copilot, sessionId: "c", cwd: "/c", kind: .promptSubmitted))
+        #expect(store.feed.map(\.sessionId) == ["c", "a", "b"])
     }
 }

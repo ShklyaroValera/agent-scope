@@ -30,13 +30,21 @@ enum DebugSnapshot {
         }
         .padding(8)
         .background(Palette.surface)
-        return [("menubar-icon", AnyView(icons))]
+        model.selectedSessionId = "mock-cc"
+        let window = HStack(spacing: 0) {
+            SidebarView().frame(width: 260)
+            Rectangle().fill(Palette.sidebarBorder).frame(width: 1)
+            MainContent()
+        }
+        .frame(width: 1280, height: 748)
+        .environment(model)
+        return [("menubar-icon", AnyView(icons)), ("main-window", AnyView(window))]
     }
 
     private static func render(_ view: some View, scheme: ColorScheme, to url: URL) {
         let appearance = NSAppearance(named: scheme == .light ? .aqua : .darkAqua)
         appearance?.performAsCurrentDrawingAppearance {
-            let renderer = ImageRenderer(content: view.environment(\.colorScheme, scheme))
+            let renderer = ImageRenderer(content: view.environment(\.colorScheme, scheme).environment(\.isRenderingSnapshot, true))
             renderer.scale = 2
             guard let image = renderer.nsImage,
                   let tiff = image.tiffRepresentation,

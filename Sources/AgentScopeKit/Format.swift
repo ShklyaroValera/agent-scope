@@ -16,6 +16,27 @@ public enum Format {
         return "\(hours / 24)d"
     }
 
+    /// "45s", "4m 12s", "1h 5m".
+    public static func elapsedPrecise(_ interval: TimeInterval) -> String {
+        let seconds = max(0, Int(interval))
+        guard seconds >= 60, seconds < 3600 else { return elapsed(interval) }
+        return seconds % 60 == 0 ? "\(seconds / 60)m" : "\(seconds / 60)m \(seconds % 60)s"
+    }
+
+    /// "claude-opus-4-1-20250805" → "Opus", "gpt-5-codex" → "GPT-5", "claude-haiku-4-5" → "Haiku".
+    public static func modelName(_ model: String) -> String {
+        let lower = model.lowercased()
+        for family in ["opus", "sonnet", "haiku"] where lower.contains(family) {
+            return family.prefix(1).uppercased() + family.dropFirst()
+        }
+        if lower.hasPrefix("gpt-") || lower.hasPrefix("o3") || lower.hasPrefix("o4") {
+            let parts = lower.split(separator: "-")
+            if parts.first == "gpt", parts.count >= 2 { return "GPT-\(parts[1])" }
+            return model
+        }
+        return model
+    }
+
     /// Groups thousands with a no-break space: "1 284".
     public static func count(_ value: Int) -> String {
         let digits = String(value.magnitude)

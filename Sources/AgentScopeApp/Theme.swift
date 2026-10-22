@@ -19,6 +19,42 @@ enum Palette {
     static let failed = Color(hex: 0xD93F3F)
     static let idle = Color.dynamic(light: 0xD1D1D6, dark: 0x636366)
 
+    static let windowBackground = Color.dynamic(light: 0xECECEE, dark: 0x1C1C1E)
+    static let sidebar = Color.dynamic(light: 0xE9E9EC, dark: 0x1E1E20)
+    static let sidebarBorder = Color.dynamic(light: 0xD6D6DB, dark: 0x38383A)
+    static let sidebarSelected = Color.dynamic(light: 0xD9D9DE, dark: 0x3A3A3C)
+    static let needsYouRow = Color.dynamic(light: 0xFBEBD5, dark: 0x3A2A14)
+    static let textBody = Color.dynamic(light: 0x4A4A4F, dark: 0xC7C7CC)
+    static let hub = Color.dynamic(light: 0x1D1D1F, dark: 0x3A3A3C)
+    static let hubSubtitle = Color(hex: 0xC7C7CC)
+    static let nodeBorder = Color.dynamic(light: 0xD1D1D6, dark: 0x48484A)
+    static let sessionNeedsYouBackground = Color.dynamic(light: 0xFFF8EE, dark: 0x33261A)
+    static let answeredText = Color.dynamic(light: 0x1C7A50, dark: 0x4ED19A)
+    static let toolWorkingBackground = Color.dynamic(light: 0xEEF4FF, dark: 0x1B2A44)
+    static let toolWorkingBorder = Color.dynamic(light: 0xC4D7FB, dark: 0x2F4F8F)
+    static let toolIdleBackground = Color.dynamic(light: 0xF2F2F5, dark: 0x2C2C2E)
+    static let toolFailedBackground = Color.dynamic(light: 0xFDEEEE, dark: 0x3F1F1F)
+    static let toolFailedBorder = Color.dynamic(light: 0xF3C1C1, dark: 0x7A2E2E)
+    static let toolFailedText = Color.dynamic(light: 0x9F1F1F, dark: 0xFF8A8A)
+    static let codeBackground = Color.dynamic(light: 0xF6F6F7, dark: 0x1C1C1E)
+    static let feedBackground = Color.dynamic(light: 0x1D1D1F, dark: 0x151517)
+
+    static func feedAgent(_ kind: AgentKind) -> Color {
+        switch kind {
+        case .claude: Color(hex: 0xF0A58A)
+        case .codex: Color(hex: 0xE5E5EA)
+        case .copilot: Color(hex: 0xC7B2F5)
+        }
+    }
+
+    static func feedMessage(_ status: NodeStatus) -> Color {
+        switch status {
+        case .needsYou: Color(hex: 0xF5B963)
+        case .failed: Color(hex: 0xF28B8B)
+        default: Color(hex: 0xD1D1D6)
+        }
+    }
+
     static let failedText = Color.dynamic(light: 0xB42323, dark: 0xFF6B6B)
     static let needsYouText = Color.dynamic(light: 0x8A4B00, dark: 0xF2B56B)
     static let bannerBackground = Color.dynamic(light: 0xFFF4E5, dark: 0x3A2A14)

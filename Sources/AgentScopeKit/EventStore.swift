@@ -29,7 +29,7 @@ public struct SessionState: Sendable {
     public var transcriptPath: String?
 
     public var mainNodeId: String { SessionState.nodeId(session: session.id, agentId: nil) }
-    public var activeSubagents: [AgentNode] { nodes.filter { $0.parentId != nil && $0.status != .idle } }
+    public var activeSubagents: [AgentNode] { nodes.filter { $0.parentId != nil && ($0.status == .working || $0.status == .needsYou) } }
 
     static func nodeId(session: String, agentId: String?) -> String {
         "\(session)/\(agentId ?? "main")"
@@ -154,17 +154,16 @@ public final class EventStore {
             finish(tool, at: event.ts, status: .failed, error: error, in: &state)
             state.failedTool = tool.tool
             state.retriedAfterFailure = false
-            log("\(label(tool)) failed" + (error.map { ": \(Format.truncated($0, to: 80))" } ?? ""), .failed)
+            log("\(tool.agentType.map { "\($0) → " } ?? "")\(ToolSummary.displayName(tool.tool)) failed" + (error.map { ": \(Format.truncated($0, to: 80))" } ?? ""), .failed)
 
         case .needsYou(let info):
-            let summary = [info.tool.map(ToolSummary.displayName), info.summary].compactMap { $0 }.joined(separator: " ")
+            let summary = info.summary.flatMap { $0.isEmpty ? nil : $0 } ?? info.tool.map(ToolSummary.displayName) ?? info.message
             state.pending = PendingDecision(
                 id: "\(event.sessionId)-\(Int(event.ts.timeIntervalSince1970 * 1000))",
-                sessionId: event.sessionId, agent: event.agent, project: project,
-                summary: summary.isEmpty ? info.message : summary
+                sessionId: event.sessionId, agent: event.agent, project: project, summary: summary
             )
             state.pendingAgentId = info.agentId
-            log("needs you: \(summary.isEmpty ? info.message : summary)", .needsYou)
+            log("waiting for permission: \(summary)", .needsYou)
 
         case .subagentStarted(let id, let type):
             let nodeId = SessionState.nodeId(session: event.sessionId, agentId: id)
@@ -178,15 +177,16 @@ public final class EventStore {
         case .subagentStopped(let id):
             let nodeId = SessionState.nodeId(session: event.sessionId, agentId: id)
             if let index = state.nodes.firstIndex(where: { $0.id == nodeId }) {
-                state.nodes[index].status = .idle
+                state.nodes[index].status = .answered
                 closeCalls(of: nodeId, at: event.ts, in: &state)
-                log("\(state.nodes[index].name) subagent finished", .answered)
+                log("\(state.nodes[index].name) ✓ finished", .answered)
             }
 
         case .turnFinished:
             state.turnActive = false
             state.failedTool = nil
             closeCalls(of: state.mainNodeId, at: event.ts, in: &state)
+            for index in state.nodes.indices where state.nodes[index].status == .answered { state.nodes[index].status = .idle }
             log("turn finished", .answered)
 
         case .sessionEnded:
@@ -328,7 +328,9 @@ public final class EventStore {
         var item = item
         item.id = nextFeedId
         nextFeedId += 1
-        feed.insert(item, at: 0)
+        // Newest first by event time: spool replay and parallel hooks can deliver out of order.
+        let index = feed.firstIndex { $0.ts <= item.ts } ?? feed.endIndex
+        feed.insert(item, at: index)
         if feed.count > feedLimit { feed.removeLast(feed.count - feedLimit) }
     }
 
