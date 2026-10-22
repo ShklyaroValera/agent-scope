@@ -140,6 +140,7 @@ final class AppModel {
         if ticks % 5 == 0, FileManager.default.fileExists(atPath: paths.spool.path) { replaySpool() }
         if ticks % 30 == 0 { saveStats() }
         if ticks % 60 == 0 { refreshHookStatuses() }
+        if ticks % 10 == 5 { reapTranscriptSessions() }
     }
 
     private func checkAttention() {
@@ -215,6 +216,17 @@ final class AppModel {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    /// Transcript-only sessions have no pid; end the ones no running agent process accounts for.
+    private func reapTranscriptSessions() {
+        guard store.sessions.values.contains(where: { $0.transcriptOnly && !$0.ended }) else { return }
+        transcriptQueue.async { [weak self] in
+            let processes = ProcessTree.agentProcesses()
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated { self?.store.reapTranscriptSessions(running: processes) }
             }
         }
     }

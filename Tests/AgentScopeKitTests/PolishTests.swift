@@ -122,3 +122,59 @@ struct TranscriptOnlySessionTests {
         #expect(store.sessions["t"]?.transcriptOnly == false)
     }
 }
+
+@MainActor
+struct ReapTests {
+    let now = Date()
+
+    func discover(_ store: EventStore, _ id: String, cwd: String, entrypoint: String?, minutesAgo: Double, agent: AgentKind = .claude) {
+        store.discovered(DiscoveredSession(
+            agent: agent, sessionId: id, cwd: cwd, path: "/t/\(id).jsonl",
+            lastModified: now.addingTimeInterval(-minutesAgo * 60), entrypoint: entrypoint
+        ))
+    }
+
+    /// The case from a real Mac: one desktop Claude in the folder, three dead VS Code sessions that were
+    /// touched more recently, and a Codex desktop thread with no process.
+    @Test func endsSessionsWithoutAMatchingProcess() {
+        let store = EventStore(now: now)
+        let app = "/Users/me/dev/client-mobile-app"
+        discover(store, "desktop", cwd: app, entrypoint: "claude-desktop", minutesAgo: 16)
+        for id in ["vs1", "vs2", "vs3"] { discover(store, id, cwd: app, entrypoint: "claude-vscode", minutesAgo: 12) }
+        discover(store, "codex", cwd: "/Users/me/dev/sec", entrypoint: nil, minutesAgo: 15, agent: .codex)
+
+        store.reapTranscriptSessions(running: [AgentProcess(pid: 1, agent: .claude, launcher: .desktop, cwd: app)], now: now)
+        #expect(store.sessions["desktop"]?.ended == false)
+        #expect(["vs1", "vs2", "vs3", "codex"].allSatisfy { store.sessions[$0]?.ended == true })
+
+        store.tick(now: now.addingTimeInterval(store.endedRetention + 1))
+        #expect(store.sessions.keys.sorted() == ["desktop"])
+    }
+
+    @Test func keepsRecentlyWrittenSessionsAndHookSessions() {
+        let store = EventStore(now: now)
+        discover(store, "fresh", cwd: "/p", entrypoint: "cli", minutesAgo: 0.5)
+        store.apply(AgentEvent(ts: now.addingTimeInterval(-3600), agent: .claude, sessionId: "hooked", cwd: "/p", kind: .promptSubmitted))
+        store.reapTranscriptSessions(running: [], now: now)
+        #expect(store.sessions["fresh"]?.ended == false)
+        #expect(store.sessions["hooked"]?.ended == false)
+    }
+
+    @Test func launcherFromEntrypointAndPath() {
+        #expect(Launcher(entrypoint: "claude-desktop") == .desktop)
+        #expect(Launcher(entrypoint: "claude-vscode") == .ide)
+        #expect(Launcher(entrypoint: "cli") == .cli)
+        #expect(Launcher(entrypoint: nil) == nil)
+        #expect(Launcher(executablePath: "/Users/me/Library/Application Support/Claude/claude-code/2.1.304/x/claude.app/Contents/MacOS/claude") == .desktop)
+        #expect(Launcher(executablePath: "/Users/me/.vscode/extensions/anthropic.claude-code-2.1/resources/native-binary/claude") == .ide)
+        #expect(Launcher(executablePath: "/Users/me/.local/share/claude/versions/2.1.283") == .cli)
+        #expect(ProcessTree.agentKind(executablePath: "/Users/me/.local/share/claude/versions/2.1.283") == .claude)
+        #expect(ProcessTree.agentKind(executablePath: "/opt/homebrew/bin/codex") == .codex)
+        #expect(ProcessTree.agentKind(executablePath: "/Applications/CodexBar.app/Contents/MacOS/CodexBar") == nil)
+    }
+
+    @Test func findsThisMachinesAgentProcesses() {
+        // Smoke test: runs without crashing and only reports agent binaries.
+        #expect(ProcessTree.agentProcesses().allSatisfy { $0.pid > 0 && !$0.cwd.isEmpty })
+    }
+}

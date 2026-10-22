@@ -199,6 +199,17 @@ public struct DiscoveredSession: Hashable, Sendable {
     public var cwd: String
     public var path: String
     public var lastModified: Date
+    /// Claude's `entrypoint` ("claude-desktop", "claude-vscode", "cli"…), when recorded.
+    public var entrypoint: String?
+
+    public init(agent: AgentKind, sessionId: String, cwd: String, path: String, lastModified: Date, entrypoint: String? = nil) {
+        self.agent = agent
+        self.sessionId = sessionId
+        self.cwd = cwd
+        self.path = path
+        self.lastModified = lastModified
+        self.entrypoint = entrypoint
+    }
 }
 
 /// Reads usage from transcripts: today's files once at launch (so totals survive restarts without
@@ -266,16 +277,12 @@ public final class TranscriptMonitor: @unchecked Sendable {
     public func discover(knownSessionIds: Set<String>, now: Date = Date()) -> [DiscoveredSession] {
         transcriptFiles().compactMap { agent, file, modified in
             guard now.timeIntervalSince(modified) < discoveryWindow else { return nil }
-            let id: String
-            let cwd: String
-            if let header = Self.header(of: file, agent: agent) {
-                id = readers[file.path]?.sessionId ?? header.id
-                cwd = header.cwd
-            } else {
-                return nil
-            }
+            guard let header = Self.header(of: file, agent: agent) else { return nil }
+            let id = readers[file.path]?.sessionId ?? header.id
             guard !knownSessionIds.contains(id) else { return nil }
-            return DiscoveredSession(agent: agent, sessionId: id, cwd: cwd, path: file.path, lastModified: modified)
+            return DiscoveredSession(
+                agent: agent, sessionId: id, cwd: header.cwd, path: file.path, lastModified: modified, entrypoint: header.entrypoint
+            )
         }
     }
 
@@ -313,8 +320,8 @@ public final class TranscriptMonitor: @unchecked Sendable {
         }
     }
 
-    /// Session id and working directory from the first lines of a transcript.
-    static func header(of url: URL, agent: AgentKind) -> (id: String, cwd: String)? {
+    /// Session id, working directory and (Claude) entrypoint from the first lines of a transcript.
+    static func header(of url: URL, agent: AgentKind) -> (id: String, cwd: String, entrypoint: String?)? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         let head = (try? handle.read(upToCount: 256 * 1024)) ?? Data()
@@ -322,10 +329,12 @@ public final class TranscriptMonitor: @unchecked Sendable {
             guard let json = try? JSONValue(parsing: Data(line)) else { continue }
             switch agent {
             case .claude:
-                if let id = json["sessionId"]?.stringValue, let cwd = json["cwd"]?.stringValue { return (id, cwd) }
+                if let id = json["sessionId"]?.stringValue, let cwd = json["cwd"]?.stringValue {
+                    return (id, cwd, json["entrypoint"]?.stringValue)
+                }
             case .codex:
                 if json["type"]?.stringValue == "session_meta", let payload = json["payload"],
-                   let id = payload["id"]?.stringValue, let cwd = payload["cwd"]?.stringValue { return (id, cwd) }
+                   let id = payload["id"]?.stringValue, let cwd = payload["cwd"]?.stringValue { return (id, cwd, nil) }
             case .copilot:
                 return nil
             }

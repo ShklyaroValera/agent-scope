@@ -72,3 +72,77 @@ public enum ProcessTree {
         ancestors.first { !shells.contains($0.name) }
     }
 }
+
+/// A running agent process, for telling live transcript-only sessions from dead ones.
+public struct AgentProcess: Hashable, Sendable {
+    public var pid: Int32
+    public var agent: AgentKind
+    public var launcher: Launcher
+    /// Working directory, from `PROC_PIDVNODEPATHINFO`.
+    public var cwd: String
+
+    public init(pid: Int32, agent: AgentKind, launcher: Launcher, cwd: String) {
+        self.pid = pid
+        self.agent = agent
+        self.launcher = launcher
+        self.cwd = cwd
+    }
+}
+
+/// How an agent was started; Claude transcripts record it as `entrypoint`.
+public enum Launcher: Hashable, Sendable {
+    case desktop, ide, cli
+
+    /// From a Claude transcript's `entrypoint` ("claude-desktop", "claude-vscode", "cli", "sdk-cli").
+    public init?(entrypoint: String?) {
+        switch entrypoint {
+        case "claude-desktop": self = .desktop
+        case let value? where value.hasPrefix("claude-vscode") || value.hasPrefix("claude-jetbrains") || value.hasPrefix("claude-ide"): self = .ide
+        case "cli", "sdk-cli", "sdk-ts", "sdk-py": self = .cli
+        default: return nil
+        }
+    }
+
+    init(executablePath path: String) {
+        if path.contains("/Application Support/Claude/claude-code/") {
+            self = .desktop
+        } else if path.contains("/.vscode/extensions/") || path.contains("/.cursor/extensions/") || path.contains("/.windsurf/extensions/")
+            || path.contains("/JetBrains/") {
+            self = .ide
+        } else {
+            self = .cli
+        }
+    }
+}
+
+extension ProcessTree {
+    /// Running Claude Code and Codex processes with their working directories. A few ms for all processes.
+    public static func agentProcesses() -> [AgentProcess] {
+        var pids = [Int32](repeating: 0, count: 8192)
+        let count = Int(proc_listallpids(&pids, Int32(pids.count * MemoryLayout<Int32>.size)))
+        var result: [AgentProcess] = []
+        for pid in pids.prefix(max(0, count)) where pid > 0 {
+            guard let path = executablePath(pid: pid), let agent = agentKind(executablePath: path),
+                  let cwd = workingDirectory(pid: pid) else { continue }
+            result.append(AgentProcess(pid: pid, agent: agent, launcher: Launcher(executablePath: path), cwd: cwd))
+        }
+        return result
+    }
+
+    /// Claude's native binaries are named `claude` or by version under `claude/versions/`; Codex's `codex`.
+    static func agentKind(executablePath path: String) -> AgentKind? {
+        let name = URL(fileURLWithPath: path).lastPathComponent
+        if name == "claude" || path.contains("/claude/versions/") { return .claude }
+        if name == "codex" { return .codex }
+        return nil
+    }
+
+    public static func workingDirectory(pid: Int32) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+        return withUnsafeBytes(of: info.pvi_cdir.vip_path) { buffer in
+            String(decoding: buffer.prefix(while: { $0 != 0 }), as: UTF8.self)
+        }
+    }
+}

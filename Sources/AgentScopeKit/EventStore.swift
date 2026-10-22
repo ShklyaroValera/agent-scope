@@ -31,6 +31,8 @@ public struct SessionState: Sendable {
     public var transcriptPath: String?
     /// Known only from its transcript: activity is inferred from the transcript growing.
     public var transcriptOnly = false
+    /// How a transcript-only session was started, to match it to a live process.
+    public var launcher: Launcher?
 
     public var mainNodeId: String { SessionState.nodeId(session: session.id, agentId: nil) }
 
@@ -306,6 +308,39 @@ public final class EventStore {
             transcriptPath: found.path, kind: .sessionStarted(source: "transcript")
         ))
         sessions[found.sessionId]?.transcriptOnly = true
+        sessions[found.sessionId]?.launcher = Launcher(entrypoint: found.entrypoint)
+    }
+
+    /// Transcript-only sessions have no pid; they count as alive only while a matching agent process
+    /// (same agent, folder and launcher) runs. With fewer processes than sessions in a folder, the most
+    /// recently active sessions keep them. The rest end and leave the list after `endedRetention`.
+    public func reapTranscriptSessions(running processes: [AgentProcess], now: Date = Date()) {
+        let candidates = sessions.values.filter { $0.transcriptOnly && !$0.ended }
+        let groups = Dictionary(grouping: candidates) { "\($0.session.agent.rawValue)|\($0.session.cwd.standardizedFileURL.path)" }
+        for group in groups.values {
+            let sample = group[0]
+            let cwd = sample.session.cwd.standardizedFileURL.path
+            let matching = processes.filter { $0.agent == sample.session.agent && $0.cwd == cwd }
+            // Sessions whose launcher is known claim processes of that kind first.
+            var available = matching
+            for state in group.sorted(by: { $0.session.lastEventAt > $1.session.lastEventAt }) {
+                if let index = available.firstIndex(where: { state.launcher == nil || $0.launcher == state.launcher }) {
+                    available.remove(at: index)
+                } else if now.timeIntervalSince(state.session.lastEventAt) > Self.transcriptActivityWindow {
+                    endSession(state.session.id, at: now)
+                }
+            }
+        }
+    }
+
+    private func endSession(_ sessionId: String, at date: Date) {
+        guard var state = sessions[sessionId] else { return }
+        state.ended = true
+        state.turnActive = false
+        state.pending = nil
+        for index in state.nodes.indices { state.nodes[index].status = .idle }
+        updateStatus(&state, now: date)
+        sessions[sessionId] = state
     }
 
     public func removeSession(_ sessionId: String) {
