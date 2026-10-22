@@ -26,4 +26,6 @@ public struct AgentScopePaths: Sendable {
     public var settings: URL { root.appending(path: "settings.json") }
     /// Editable per-model prices for cost estimates.
     public var prices: URL { root.appending(path: "prices.json") }
+    /// The built-in price table, rewritten by each app version for reference.
+    public var pricesDefaults: URL { root.appending(path: "prices.defaults.json") }
 }

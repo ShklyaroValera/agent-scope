@@ -70,7 +70,7 @@ struct ClaudeConfiguratorTests {
         #expect(pre.count == 2)
         #expect(pre[0]["matcher"] == "Agent")
         #expect(pre[1]["matcher"] == "*")
-        #expect(pre[1]["hooks"]?.arrayValue?.first?["command"] == "/Applications/AgentScope.app/Contents/Helpers/agentscope hook --agent claude --event PreToolUse")
+        #expect(pre[1]["hooks"]?.arrayValue?.first?["command"] == "test -x /Applications/AgentScope.app/Contents/Helpers/agentscope && /Applications/AgentScope.app/Contents/Helpers/agentscope hook --agent claude --event PreToolUse || true")
         #expect(json["hooks"]?["Stop"]?.arrayValue?.first?["matcher"] == nil)
     }
 
@@ -89,7 +89,7 @@ struct ClaudeConfiguratorTests {
         try ConfigFile.apply(try configurator.planSetup(hookBinary: "/new place/agentscope"))
         let json = try JSONValue(parsing: try read())
         let commands = json["hooks"]?["Stop"]?.arrayValue?.flatMap { $0["hooks"]?.arrayValue ?? [] }.compactMap { $0["command"]?.stringValue }
-        #expect(commands == ["'/new place/agentscope' hook --agent claude --event Stop"])
+        #expect(commands == ["test -x '/new place/agentscope' && '/new place/agentscope' hook --agent claude --event Stop || true"])
     }
 
     @Test func uninstallRestoresOriginalBytes() throws {
@@ -132,6 +132,7 @@ struct ClaudeConfiguratorTests {
     @Test func recognisesOurCommandsOnly() {
         #expect(ClaudeConfigurator.isOurs("/Applications/AgentScope.app/Contents/Helpers/agentscope hook --agent claude --event Stop"))
         #expect(ClaudeConfigurator.isOurs("'/x y/agentscope' hook --agent claude --event Stop"))
+        #expect(ClaudeConfigurator.isOurs("test -x /a/agentscope && /a/agentscope hook --agent claude --event Stop || true"))
         #expect(!ClaudeConfigurator.isOurs("agentscope hook --agent codex --event Stop"))
         #expect(!ClaudeConfigurator.isOurs("~/.claude/hooks/peon-ping/peon.sh"))
     }

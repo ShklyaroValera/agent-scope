@@ -7,6 +7,8 @@ import ServiceManagement
 enum MainTab: String, CaseIterable, Identifiable {
     case graph = "Graph", timeline = "Timeline", usage = "Usage"
     var id: String { rawValue }
+
+    static let available: [MainTab] = [.graph]
 }
 
 @MainActor
@@ -24,6 +26,8 @@ final class AppModel {
     private(set) var serverError: String?
     private(set) var hookStatuses: [AgentKind: HookStatus] = [:]
     private(set) var setupLog: String?
+    /// Shown briefly when Jump to has no window to go to.
+    private(set) var jumpMessage: String?
     /// Set by the app scene: opens the Agent Graph window.
     @ObservationIgnored var openGraphWindow: (() -> Void)?
 
@@ -31,26 +35,46 @@ final class AppModel {
     @ObservationIgnored private var server: SocketServer?
     @ObservationIgnored private var timer: Timer?
     @ObservationIgnored private lazy var mockStore = EventStore.mock()
-    @ObservationIgnored private let transcripts = TranscriptMonitor()
-    @ObservationIgnored private let transcriptQueue = DispatchQueue(label: "agentscope.transcripts", qos: .utility)
+    @ObservationIgnored private lazy var transcripts = TranscriptCoordinator(store: store, paths: paths)
     @ObservationIgnored private let notifier = Notifier()
     @ObservationIgnored private var hotKey: GlobalHotKey?
-    @ObservationIgnored private var lastStatuses: [String: NodeStatus] = [:]
-    @ObservationIgnored private var ticks = 0
+    @ObservationIgnored private var notifiedTurns: [String: Date] = [:]
+    @ObservationIgnored private let launchedAt = Date()
+    @ObservationIgnored private var lastRun: [Job: Date] = [:]
 
-    /// The store the main window draws: live, or the design mock.
+    /// Periodic work, each on its own interval (seconds).
+    private enum Job: Hashable {
+        case transcripts, transcriptScan, spool, reap, saveStats, hookStatus
+
+        var interval: TimeInterval {
+            switch self {
+            case .transcripts: 2
+            case .transcriptScan: 20
+            case .spool: 5
+            case .reap: 10
+            case .saveStats: 30
+            case .hookStatus: 60
+            }
+        }
+    }
+
+    /// The store the windows draw: live, or the design mock.
     var activeStore: EventStore { useMockData ? mockStore : store }
 
-    /// Allow/Deny need `agentscope hook --decide` (phase 2); until then only the mock shows them.
-    var showsDecisionButtons: Bool { useMockData }
+    /// Allow/Deny needs `agentscope hook --decide`, which is not built yet.
+    var showsDecisionButtons: Bool { false }
 
-    var snapshot: DashboardSnapshot {
-        useMockData ? .mock() : store.snapshot()
-    }
+    var snapshot: DashboardSnapshot { activeStore.snapshot() }
 
     /// Installed agents whose hooks are missing, for the popover's setup offer.
     var agentsNeedingSetup: [AgentKind] {
         AgentKind.allCases.filter { settings.enabledAgents.contains($0) && hookStatuses[$0]?.needsSetup == true }
+    }
+
+    /// Codex skips new hooks until the user approves them in `/hooks`.
+    var codexAwaitsTrust: Bool {
+        guard settings.enabledAgents.contains(.codex), case .untrusted = hookStatuses[.codex] else { return false }
+        return true
     }
 
     // MARK: - Lifecycle
@@ -90,12 +114,16 @@ final class AppModel {
         do {
             try server.start()
             self.server = server
+        } catch SocketError.alreadyRunning {
+            // Another AgentScope owns the socket; a second menu bar icon would only confuse.
+            NSApp.terminate(nil)
+            return
         } catch {
             serverError = "\(error)"
         }
 
-        replaySpool()
-        loadPrices()
+        replaySpool(after: 0)
+        transcripts.loadPrices()
         refreshHookStatuses()
         notifier.onJump = { [weak self] in self?.jump(toSession: $0) }
         notifier.start()
@@ -112,9 +140,10 @@ final class AppModel {
         saveStats()
     }
 
-    /// Pushes settings into the store and the shortcut.
+    /// Pushes settings into the store, the transcript reader and the shortcut.
     func applySettings() {
         store.removeAfter = TimeInterval(settings.idleTimeoutMinutes * 60)
+        transcripts.enabledAgents = settings.enabledAgents
         for (id, state) in store.sessions where !settings.enabledAgents.contains(state.session.agent) {
             store.removeSession(id)
         }
@@ -134,36 +163,54 @@ final class AppModel {
     private func everySecond() {
         store.tick()
         checkAttention()
-        ticks += 1
-        if ticks % 2 == 0 { pollTranscripts(scanToday: ticks == 2, discover: ticks % 20 == 2) }
+        let now = Date()
+        func due(_ job: Job) -> Bool {
+            guard now.timeIntervalSince(lastRun[job] ?? .distantPast) >= job.interval else { return false }
+            lastRun[job] = now
+            return true
+        }
+        if due(.transcripts) {
+            let scan = due(.transcriptScan)
+            transcripts.poll(scan: scan, discover: scan)
+        }
         // Events that missed the socket (app busy, restarting) land in the spool; pick them up soon.
-        if ticks % 5 == 0, FileManager.default.fileExists(atPath: paths.spool.path) { replaySpool() }
-        if ticks % 30 == 0 { saveStats() }
-        if ticks % 60 == 0 { refreshHookStatuses() }
-        if ticks % 10 == 5 { reapTranscriptSessions() }
+        if due(.spool), FileManager.default.fileExists(atPath: paths.spool.path) { replaySpool(after: 0.2) }
+        if due(.reap) { transcripts.reap() }
+        if due(.saveStats) { saveStats() }
+        if due(.hookStatus) { refreshHookStatuses() }
     }
 
     private func checkAttention() {
         if settings.notifyNeedsYou {
             notifier.needsYou(store.snapshot().pending)
         }
-        var statuses: [String: NodeStatus] = [:]
+        guard settings.notifyFinished else { return }
         for (id, state) in store.sessions {
-            statuses[id] = state.session.status
-            if settings.notifyFinished, let previous = lastStatuses[id], previous != .idle, state.session.status == .idle {
-                notifier.finished(state.session)
-            }
+            // Only a real end of turn, not timeouts or process deaths, and not turns from before launch.
+            guard let finished = state.turnFinishedAt, finished > launchedAt, notifiedTurns[id] != finished else { continue }
+            notifiedTurns[id] = finished
+            notifier.finished(state.session)
         }
-        lastStatuses = statuses
     }
 
-    private func replaySpool() {
-        for line in Spool.drain(paths.spool) {
-            guard let envelope = try? HookEnvelope(line: line) else { continue }
-            store.apply(Normalizer.normalize(envelope).filter { settings.enabledAgents.contains($0.agent) })
+    /// Replays spooled events. `delay` lets a hook that opened the spool just before it was claimed
+    /// finish writing.
+    private func replaySpool(after delay: TimeInterval) {
+        guard let claimed = Spool.claim(paths.spool) else { return }
+        let apply = { [weak self] in
+            guard let self else { return }
+            for line in Spool.read(claimed) {
+                guard let envelope = try? HookEnvelope(line: line) else { continue }
+                self.store.apply(Normalizer.normalize(envelope).filter { self.settings.enabledAgents.contains($0.agent) })
+            }
+            self.store.tick()
+            self.checkAttention()
         }
-        store.tick()
-        checkAttention()
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { MainActor.assumeIsolated(apply) }
+        } else {
+            apply()
+        }
     }
 
     private func saveStats() {
@@ -175,60 +222,8 @@ final class AppModel {
         Data((snapshot.json.compactText + "\n").utf8)
     }
 
-    // MARK: - Transcripts
-
     func loadPrices() {
-        if !FileManager.default.fileExists(atPath: paths.prices.path) {
-            try? Data(PriceTable.defaults.json.formatted().utf8).write(to: paths.prices)
-        }
-        let prices = PriceTable.load(from: paths.prices)
-        transcriptQueue.async { [transcripts] in transcripts.prices = prices }
-    }
-
-    /// Follows transcripts for tokens, context and cost; at launch reads all of today's, and now and then
-    /// looks for sessions that only have a transcript.
-    private func pollTranscripts(scanToday: Bool, discover: Bool) {
-        let tracked = store.sessions.values.compactMap { state in
-            state.transcriptPath.map { (state.session.id, state.session.agent, $0) }
-        }
-        let known = Set(store.sessions.keys)
-        let enabled = settings.enabledAgents
-        transcriptQueue.async { [weak self, transcripts] in
-            var replaced: [String] = []
-            for (sessionId, agent, path) in tracked {
-                if let old = transcripts.track(sessionId: sessionId, agent: agent, path: path) { replaced.append(old) }
-            }
-            if scanToday { transcripts.scan(modifiedSince: Calendar.current.startOfDay(for: Date())) }
-            let found = discover ? transcripts.discover(knownSessionIds: known).filter { enabled.contains($0.agent) } : []
-            for session in found { transcripts.track(sessionId: session.sessionId, agent: session.agent, path: session.path) }
-            let updates = transcripts.poll().filter { enabled.contains($0.agent) }
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated {
-                    guard let self else { return }
-                    // A transcript-only session turned out to be one the hooks know under another id.
-                    for id in replaced { self.store.removeSession(id) }
-                    found.forEach(self.store.discovered)
-                    for update in updates {
-                        let delta = update.delta
-                        self.store.addUsage(
-                            sessionId: update.sessionId, agent: update.agent, tokens: delta.tokens, costUSD: delta.costUSD,
-                            contextUsed: delta.contextUsed, model: delta.model, at: delta.ts ?? Date()
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    /// Transcript-only sessions have no pid; end the ones no running agent process accounts for.
-    private func reapTranscriptSessions() {
-        guard store.sessions.values.contains(where: { $0.transcriptOnly && !$0.ended }) else { return }
-        transcriptQueue.async { [weak self] in
-            let processes = ProcessTree.agentProcesses()
-            DispatchQueue.main.async {
-                MainActor.assumeIsolated { self?.store.reapTranscriptSessions(running: processes) }
-            }
-        }
+        transcripts.loadPrices()
     }
 
     // MARK: - Setup
@@ -313,30 +308,16 @@ final class AppModel {
         openGraphWindow?()
     }
 
-    func decide(_ decision: PendingDecision, allow: Bool) {
-        // Allow/Deny is phase 2 (SPEC §3.5).
-    }
+    func decide(_ decision: PendingDecision, allow: Bool) {}
 
-    /// Brings the agent's terminal or IDE to the front; for Terminal and iTerm2 also selects its tab.
+    /// Brings the agent's terminal or IDE to the front, or says why it can't.
     func jump(toSession sessionId: String) {
-        guard let state = store.sessions[sessionId],
-              let target = JumpResolver.target(hostProcesses: state.hostProcesses, tty: state.tty)
-        else {
-            NSSound.beep()
-            return
-        }
-        if let app = NSRunningApplication(processIdentifier: target.pid) ?? NSWorkspace.shared.runningApplications.first(where: {
-            $0.bundleURL?.path == target.appPath
-        }) {
-            app.activate()
-        } else {
-            NSWorkspace.shared.openApplication(at: URL(fileURLWithPath: target.appPath), configuration: .init())
-        }
-        if let script = JumpResolver.tabScript(for: target) {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
-            process.arguments = ["-e", script]
-            try? process.run()
+        guard let state = activeStore.sessions[sessionId] else { return }
+        guard let message = JumpService.jump(to: state) else { return }
+        NSSound.beep()
+        jumpMessage = message
+        DispatchQueue.main.asyncAfter(deadline: .now() + 6) { [weak self] in
+            MainActor.assumeIsolated { if self?.jumpMessage == message { self?.jumpMessage = nil } }
         }
     }
 }

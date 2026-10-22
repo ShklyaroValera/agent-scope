@@ -10,8 +10,11 @@ struct HooksDocument: Sendable {
     var matcherEvents: Set<String> = []
     var timeout: @Sendable (String) -> Int = { _ in 5 }
 
+    /// Extra arguments per event, e.g. `--decide` for permission requests.
+    var extraArguments: @Sendable (String) -> String = { _ in "" }
+
     func command(hookBinary: String, event: String) -> String {
-        "\(ConfigFile.shellQuoted(hookBinary)) hook --agent \(agent.rawValue) --event \(event)"
+        ConfigFile.hookCommand(binary: hookBinary, agent: agent, event: event, extra: extraArguments(event))
     }
 
     /// True for hook commands written by any AgentScope install, wherever its binary lives.

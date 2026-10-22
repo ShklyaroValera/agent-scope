@@ -78,14 +78,17 @@ public struct AgentNode: Identifiable, Hashable, Sendable {
     public var name: String
     public var model: String?
     public var status: NodeStatus
+    /// When a subagent reported back; finished subagents leave the graph shortly after.
+    public var finishedAt: Date?
 
-    public init(id: String, sessionId: String, parentId: String?, name: String, model: String? = nil, status: NodeStatus) {
+    public init(id: String, sessionId: String, parentId: String?, name: String, model: String? = nil, status: NodeStatus, finishedAt: Date? = nil) {
         self.id = id
         self.sessionId = sessionId
         self.parentId = parentId
         self.name = name
         self.model = model
         self.status = status
+        self.finishedAt = finishedAt
     }
 }
 

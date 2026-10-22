@@ -122,7 +122,7 @@ private struct TodayCard: View {
             Text("TODAY").font(.ui(11, .semibold)).tracking(0.22).foregroundStyle(Palette.textTertiary)
             row("Tool calls", Format.count(today.toolCalls))
             row("Tokens", Format.tokens(today.tokens))
-            row("Est. cost", Format.cost(today.costUSD))
+            row("Est. cost", Format.cost(today.costUSD) + (today.unpricedTokens > 0 ? "+" : ""))
         }
         .padding(12)
         .background(Palette.surface, in: RoundedRectangle(cornerRadius: 10))

@@ -19,11 +19,14 @@ struct MainWindow: View {
         .navigationSubtitle("\(Host.current().localizedName ?? "This Mac") · local")
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Picker("View", selection: $model.tab) {
-                    ForEach(MainTab.allCases) { Text($0.rawValue).tag($0) }
+                // Tabs appear as they get built; no empty placeholders.
+                if MainTab.available.count > 1 {
+                    Picker("View", selection: $model.tab) {
+                        ForEach(MainTab.available) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
                 }
-                .pickerStyle(.segmented)
-                .labelsHidden()
                 Button {
                     openSettings()
                 } label: {

@@ -12,7 +12,9 @@ struct ClaudeNormalizerTests {
     @Test func everyFixtureNormalizes() throws {
         let envelopes = try FixtureLoader.envelopes("claude", version)
         for envelope in envelopes {
-            #expect(Normalizer.normalize(envelope).count == 1, "\(envelope.event ?? "?")")
+            // The Agent tool's result also reports the subagent's model.
+            let expected = envelope.payload["tool_response"]?["agentId"] != nil ? 2 : 1
+            #expect(Normalizer.normalize(envelope).count == expected, "\(envelope.event ?? "?")")
         }
     }
 
@@ -27,13 +29,14 @@ struct ClaudeNormalizerTests {
             case .needsYou: "needs"
             case .subagentStarted(_, let type): "sub+:\(type)"
             case .subagentStopped: "sub-"
+            case .subagentInfo(_, let model): "info:\(model ?? "")"
             case .turnFinished: "stop"
             case .sessionEnded: "end"
             }
         }
         #expect(kinds == [
             "start", "prompt", "pre:Bash", "post:Bash", "pre:Read", "post:Read", "pre:Read", "fail:Read",
-            "pre:Bash", "fail:Bash", "pre:Agent", "post:Agent", "sub+:Explore", "pre:Bash", "needs",
+            "pre:Bash", "fail:Bash", "pre:Agent", "post:Agent", "info:claude-haiku-4-5-20251001", "sub+:Explore", "pre:Bash", "needs",
             "pre:Glob", "post:Glob", "sub-", "stop", "prompt", "stop", "end",
         ])
     }

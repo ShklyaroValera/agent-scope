@@ -13,6 +13,7 @@ private func kinds(_ events: [AgentEvent]) -> [String] {
         case .needsYou(let info): "needs:\(info.summary ?? "")"
         case .subagentStarted(_, let type): "sub+:\(type)"
         case .subagentStopped: "sub-"
+        case .subagentInfo(_, let model): "info:\(model ?? "")"
         case .turnFinished: "stop"
         case .sessionEnded: "end"
         }
@@ -195,7 +196,7 @@ struct CodexCopilotConfiguratorTests {
         try ConfigFile.apply(try codex.planSetup(hookBinary: "/bin/agentscope"))
         #expect(codex.untrustedEvents() == Set(CodexConfigurator.events))
 
-        let command = "/bin/agentscope hook --agent codex --event Stop"
+        let command = ConfigFile.hookCommand(binary: "/bin/agentscope", agent: .codex, event: "Stop")
         let hash = CodexConfigurator.trustHash(event: "Stop", command: command, timeout: 5, matcher: nil)
         let config = """
         model = "gpt-6"
@@ -221,7 +222,7 @@ struct CodexCopilotConfiguratorTests {
         #expect(copilot.installedEvents() == Set(CopilotConfigurator.events))
         let json = try JSONValue(parsing: Data(contentsOf: copilot.configFile))
         #expect(json["version"] == 1)
-        #expect(json["hooks"]?["PreToolUse"]?.arrayValue?.first?["bash"] == "/bin/agentscope hook --agent copilot --event PreToolUse")
+        #expect(json["hooks"]?["PreToolUse"]?.arrayValue?.first?["bash"] == "test -x /bin/agentscope && /bin/agentscope hook --agent copilot --event PreToolUse || true")
         let again = try copilot.planSetup(hookBinary: "/bin/agentscope")
         #expect(!again.hasChanges)
 

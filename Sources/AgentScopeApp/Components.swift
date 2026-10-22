@@ -22,20 +22,22 @@ struct PulseDot: View {
     var size: CGFloat = 8
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    @State private var expanded = false
+
+    /// A repeating Core Animation, not a per-frame redraw: no CPU while it runs.
     var body: some View {
-        if reduceMotion {
-            dot
-        } else {
-            TimelineView(.animation) { context in
-                let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: 1.8) / 1.8
-                let progress = min(phase / 0.7, 1)
-                dot.background {
+        dot
+            .background {
+                if !reduceMotion {
                     Circle()
-                        .fill(color.opacity(0.5 * (1 - progress)))
-                        .frame(width: size + 14 * progress, height: size + 14 * progress)
+                        .fill(color)
+                        .frame(width: size, height: size)
+                        .scaleEffect(expanded ? (size + 14) / size : 1)
+                        .opacity(expanded ? 0 : 0.5)
+                        .animation(.easeOut(duration: 1.8).repeatForever(autoreverses: false), value: expanded)
                 }
             }
-        }
+            .onAppear { expanded = true }
     }
 
     private var dot: some View {

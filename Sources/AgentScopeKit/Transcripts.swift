@@ -13,8 +13,6 @@ public struct UsageSample: Hashable, Sendable {
     /// Tokens in the context window after this response.
     public var contextTokens: Int?
     public var contextWindow: Int?
-    /// Claude Code's own running total for the session (`cost-state` lines), preferred over estimates.
-    public var sessionTotalCostUSD: Double?
 
     public init() {}
 
@@ -31,7 +29,8 @@ public struct TranscriptReader: Sendable {
     public let format: Format
     public private(set) var offset: UInt64 = 0
     private var remainder = Data()
-    private var seenMessageIds = Set<String>()
+    /// A response's content blocks are consecutive lines, so a short memory of ids is enough.
+    private var recentMessageIds: [String] = []
     private var model: String?
     private var contextWindow: Int?
     /// Codex reports running totals; samples are their differences.
@@ -44,6 +43,9 @@ public struct TranscriptReader: Sendable {
 
     /// Large files are read over several polls, a chunk at a time, to keep memory flat.
     public mutating func readNew(maxBytes: Int = 8 * 1024 * 1024) -> [UsageSample] {
+        // A stat is all an unchanged file costs.
+        var info = stat()
+        guard stat(url.path, &info) == 0, UInt64(info.st_size) != offset else { return [] }
         guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
         defer { try? handle.close() }
         let size = (try? handle.seekToEnd()) ?? 0
@@ -84,9 +86,10 @@ public struct TranscriptReader: Sendable {
         switch json["type"]?.stringValue {
         case "assistant":
             let message = json["message"]
-            guard let usage = message?["usage"], let id = message?["id"]?.stringValue, !seenMessageIds.contains(id) else { return nil }
+            guard let usage = message?["usage"], let id = message?["id"]?.stringValue, !recentMessageIds.contains(id) else { return nil }
             // Each content block of one response repeats the same usage.
-            seenMessageIds.insert(id)
+            recentMessageIds.append(id)
+            if recentMessageIds.count > 64 { recentMessageIds.removeFirst() }
             let model = message?["model"]?.stringValue
             guard model != "<synthetic>" else { return nil }
             var sample = UsageSample()
@@ -104,12 +107,9 @@ public struct TranscriptReader: Sendable {
             }
             sample.contextTokens = sample.input + sample.cacheRead + created
             return sample
-        case "cost-state":
-            guard let total = json["totalCostUSD"]?.doubleValue else { return nil }
-            var sample = UsageSample()
-            sample.sessionTotalCostUSD = total
-            return sample
         default:
+            // `cost-state` totals are ignored on purpose: they have no timestamp and leave out subagent
+            // transcripts, so cost would disagree with tokens. Both come from the same samples instead.
             return nil
         }
     }
@@ -174,15 +174,8 @@ public struct UsageAccumulator: Sendable {
     }
 
     public mutating func delta(for sample: UsageSample, prices: PriceTable) -> Delta {
-        var cost: Double?
-        if let total = sample.sessionTotalCostUSD {
-            // Claude Code's own figure replaces our estimate so far.
-            cost = total - costSoFar
-            costSoFar = total
-        } else if let estimate = prices.cost(sample) {
-            cost = estimate
-            costSoFar += estimate
-        }
+        let cost = prices.cost(sample)
+        costSoFar += cost ?? 0
         var context: Double?
         if let tokens = sample.contextTokens {
             let window = sample.model.flatMap { prices.price(for: $0)?.contextWindow } ?? sample.contextWindow ?? 200_000
@@ -223,6 +216,8 @@ public final class TranscriptMonitor: @unchecked Sendable {
 
     public var prices: PriceTable
     public var discoveryWindow: TimeInterval = 10 * 60
+    /// First entry of each newly followed main transcript, for sessions that started before the app.
+    public private(set) var startTimes: [(sessionId: String, date: Date)] = []
     private let home: URL
     private var readers: [String: (sessionId: String, agent: AgentKind, reader: TranscriptReader, usage: UsageAccumulator)] = [:]
 
@@ -242,7 +237,15 @@ public final class TranscriptMonitor: @unchecked Sendable {
         }
         guard let format = Self.format(for: agent) else { return nil }
         readers[path] = (sessionId, agent, TranscriptReader(url: URL(fileURLWithPath: path), format: format), UsageAccumulator())
+        if !path.contains("/subagents/"), let date = Self.header(of: URL(fileURLWithPath: path), agent: agent)?.started {
+            startTimes.append((sessionId, date))
+        }
         return nil
+    }
+
+    public func takeStartTimes() -> [(sessionId: String, date: Date)] {
+        defer { startTimes = [] }
+        return startTimes
     }
 
     public func isTracking(_ path: String) -> Bool { readers[path] != nil }
@@ -251,9 +254,10 @@ public final class TranscriptMonitor: @unchecked Sendable {
     @discardableResult
     public func scan(modifiedSince date: Date) -> Int {
         var added = 0
-        for (agent, file, modified) in transcriptFiles() where modified >= date && !isTracking(file.path) {
-            guard let header = Self.header(of: file, agent: agent) else { continue }
-            track(sessionId: header.id, agent: agent, path: file.path)
+        for (agent, file, modified, parent) in transcriptFiles() where modified >= date && !isTracking(file.path) {
+            // Subagent transcripts count toward the session that launched them.
+            guard let id = parent ?? Self.header(of: file, agent: agent)?.id else { continue }
+            track(sessionId: id, agent: agent, path: file.path)
             added += 1
         }
         return added
@@ -275,8 +279,8 @@ public final class TranscriptMonitor: @unchecked Sendable {
 
     /// Recently written transcripts of sessions the store does not know.
     public func discover(knownSessionIds: Set<String>, now: Date = Date()) -> [DiscoveredSession] {
-        transcriptFiles().compactMap { agent, file, modified in
-            guard now.timeIntervalSince(modified) < discoveryWindow else { return nil }
+        transcriptFiles().compactMap { agent, file, modified, parent in
+            guard parent == nil, now.timeIntervalSince(modified) < discoveryWindow else { return nil }
             guard let header = Self.header(of: file, agent: agent) else { return nil }
             let id = readers[file.path]?.sessionId ?? header.id
             guard !knownSessionIds.contains(id) else { return nil }
@@ -286,18 +290,27 @@ public final class TranscriptMonitor: @unchecked Sendable {
         }
     }
 
-    /// Claude project transcripts and Codex rollouts from today and yesterday, with modification dates.
-    func transcriptFiles(now: Date = Date()) -> [(AgentKind, URL, Date)] {
+    /// Claude project transcripts (with their subagents' transcripts, tagged with the parent session id) and
+    /// Codex rollouts from today and yesterday, with modification dates.
+    func transcriptFiles(now: Date = Date()) -> [(AgentKind, URL, Date, String?)] {
         let manager = FileManager.default
         func modified(_ url: URL) -> Date? {
             (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
         }
-        var files: [(AgentKind, URL, Date)] = []
+        var files: [(AgentKind, URL, Date, String?)] = []
         let projects = home.appending(path: ".claude/projects")
         for directory in (try? manager.contentsOfDirectory(at: projects, includingPropertiesForKeys: nil)) ?? [] {
-            for file in (try? manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
-            where file.pathExtension == "jsonl" {
-                if let date = modified(file) { files.append((.claude, file, date)) }
+            for entry in (try? manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? [] {
+                if entry.pathExtension == "jsonl" {
+                    if let date = modified(entry) { files.append((.claude, entry, date, nil)) }
+                    continue
+                }
+                // <project>/<session-id>/subagents/agent-*.jsonl
+                let subagents = entry.appending(path: "subagents")
+                for file in (try? manager.contentsOfDirectory(at: subagents, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+                where file.pathExtension == "jsonl" {
+                    if let date = modified(file) { files.append((.claude, file, date, entry.lastPathComponent)) }
+                }
             }
         }
         let calendar = Calendar.current
@@ -306,7 +319,7 @@ public final class TranscriptMonitor: @unchecked Sendable {
             let directory = home.appending(path: String(format: ".codex/sessions/%04d/%02d/%02d", parts.year!, parts.month!, parts.day!))
             for file in (try? manager.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
             where file.lastPathComponent.hasPrefix("rollout-") && file.pathExtension == "jsonl" {
-                if let date = modified(file) { files.append((.codex, file, date)) }
+                if let date = modified(file) { files.append((.codex, file, date, nil)) }
             }
         }
         return files
@@ -320,8 +333,8 @@ public final class TranscriptMonitor: @unchecked Sendable {
         }
     }
 
-    /// Session id, working directory and (Claude) entrypoint from the first lines of a transcript.
-    static func header(of url: URL, agent: AgentKind) -> (id: String, cwd: String, entrypoint: String?)? {
+    /// Session id, working directory, (Claude) entrypoint and first timestamp from the start of a transcript.
+    static func header(of url: URL, agent: AgentKind) -> (id: String, cwd: String, entrypoint: String?, started: Date?)? {
         guard let handle = try? FileHandle(forReadingFrom: url) else { return nil }
         defer { try? handle.close() }
         let head = (try? handle.read(upToCount: 256 * 1024)) ?? Data()
@@ -330,11 +343,13 @@ public final class TranscriptMonitor: @unchecked Sendable {
             switch agent {
             case .claude:
                 if let id = json["sessionId"]?.stringValue, let cwd = json["cwd"]?.stringValue {
-                    return (id, cwd, json["entrypoint"]?.stringValue)
+                    return (id, cwd, json["entrypoint"]?.stringValue, json["timestamp"]?.stringValue.flatMap(TranscriptReader.parseDate))
                 }
             case .codex:
                 if json["type"]?.stringValue == "session_meta", let payload = json["payload"],
-                   let id = payload["id"]?.stringValue, let cwd = payload["cwd"]?.stringValue { return (id, cwd, nil) }
+                   let id = payload["id"]?.stringValue, let cwd = payload["cwd"]?.stringValue {
+                    return (id, cwd, nil, json["timestamp"]?.stringValue.flatMap(TranscriptReader.parseDate))
+                }
             case .copilot:
                 return nil
             }

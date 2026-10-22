@@ -10,6 +10,7 @@ extension DailyStats {
             ])
         }
         var object = totals(toolCalls, tokens, costUSD)
+        if unpricedTokens > 0 { object["unpricedTokens"] = .int(unpricedTokens) }
         object["byAgent"] = .object(JSONObject(byAgent.keys.sorted { $0.rawValue < $1.rawValue }.map { agent in
             let stats = byAgent[agent]!
             return JSONObject.Entry(key: agent.rawValue, value: .object(totals(stats.toolCalls, stats.tokens, stats.costUSD)))
@@ -33,6 +34,7 @@ extension DailyStats {
             costUSD: json["costUSD"]?.doubleValue ?? 0,
             byAgent: byAgent
         )
+        unpricedTokens = json["unpricedTokens"]?.intValue ?? 0
     }
 }
 

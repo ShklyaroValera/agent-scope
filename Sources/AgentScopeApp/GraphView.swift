@@ -14,11 +14,27 @@ struct GraphView: View {
     @State private var pan: CGSize = .zero
     @State private var drag: CGSize = .zero
     @State private var inspected: String?
+    /// The graph size the fit scale was computed for. Tool chips come and go every second; refitting to
+    /// each change made the whole graph jump, so the fit only follows larger changes.
+    @State private var fittedSize: CGSize = .zero
+    /// Zoomed in on the selected session.
+    @State private var focused = false
+
+    /// Below this the labels are unreadable; the user pans instead.
+    static let minimumFit: CGFloat = 0.55
 
     var body: some View {
         GeometryReader { proxy in
-            let fit = graph.size.width > 0
-                ? min(1, proxy.size.width / graph.size.width, proxy.size.height / graph.size.height) : 1
+            let focus = focused ? model.selectedSessionId.flatMap { graph.bounds(ofSession: $0) } : nil
+            let target = focus ?? CGRect(origin: .zero, size: fittedSize == .zero ? graph.size : fittedSize)
+            let fit = target.width > 0
+                ? max(Self.minimumFit, min(1.4, (proxy.size.width - 40) / target.width, (proxy.size.height - 40) / target.height))
+                : 1
+            let scale = fit * zoom * pinch
+            // Center the focused session: content is scaled around the graph's center.
+            let focusOffset = focus.map {
+                CGSize(width: (graph.size.width / 2 - $0.midX) * scale, height: (graph.size.height / 2 - $0.midY) * scale)
+            } ?? .zero
             ZStack(alignment: .topLeading) {
                 EdgeLayer(edges: graph.edges, animate: !reduceMotion)
                 ForEach(graph.nodes) { node in
@@ -28,8 +44,9 @@ struct GraphView: View {
                 }
             }
             .frame(width: graph.size.width, height: graph.size.height)
-            .scaleEffect(fit * zoom * pinch)
-            .offset(x: pan.width + drag.width, y: pan.height + drag.height)
+            .scaleEffect(scale)
+            .offset(x: pan.width + drag.width + focusOffset.width, y: pan.height + drag.height + focusOffset.height)
+            .animation(.easeInOut(duration: 0.25), value: focused)
             .frame(width: proxy.size.width, height: proxy.size.height)
             .contentShape(Rectangle())
             .gesture(
@@ -50,6 +67,13 @@ struct GraphView: View {
                     }
             )
         }
+        .onAppear { fittedSize = graph.size }
+        .onChange(of: graph.size) { _, size in
+            let changed = abs(size.width - fittedSize.width) > fittedSize.width * 0.2
+                || abs(size.height - fittedSize.height) > fittedSize.height * 0.2
+            if changed { fittedSize = size }
+        }
+        .onChange(of: model.selectedSessionId) { _, id in if id == nil { focused = false } }
         .overlay(alignment: .bottomTrailing) { zoomControls }
         .overlay {
             if graph.nodes.isEmpty {
@@ -68,7 +92,16 @@ struct GraphView: View {
             zoomButton("arrow.up.left.and.down.right.magnifyingglass", "Fit") {
                 zoom = 1
                 pan = .zero
+                focused = false
+                fittedSize = graph.size
             }
+            zoomButton("scope", "Focus on the selected session (or double-click it)") {
+                guard model.selectedSessionId != nil else { return }
+                zoom = 1
+                pan = .zero
+                focused.toggle()
+            }
+            .opacity(model.selectedSessionId == nil ? 0.4 : 1)
             zoomButton("plus", "Zoom in") { zoom = min(3, zoom * 1.25) }
         }
         .padding(4)
@@ -99,6 +132,12 @@ struct GraphView: View {
                 } onTap: {
                     model.selectedSessionId = sessionId
                 }
+                .simultaneousGesture(TapGesture(count: 2).onEnded {
+                    model.selectedSessionId = sessionId
+                    zoom = 1
+                    pan = .zero
+                    focused = true
+                })
             }
         case .subagent(let sessionId, let nodeId):
             if let state = states[sessionId], let agent = state.nodes.first(where: { $0.id == nodeId }) {
@@ -141,7 +180,7 @@ private struct EdgeLayer: View {
 
     var body: some View {
         let flowing = animate && edges.contains { $0.flow != nil }
-        TimelineView(.animation(minimumInterval: 1 / 30, paused: !flowing)) { context in
+        TimelineView(.animation(minimumInterval: 1 / 20, paused: !flowing)) { context in
             Canvas { canvas, _ in
                 // Idle connectors first so coloured edges draw over the bus.
                 for edge in edges.sorted(by: { ($0.status == .idle ? 0 : 1) < ($1.status == .idle ? 0 : 1) }) {

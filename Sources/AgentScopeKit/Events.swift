@@ -48,6 +48,8 @@ public enum EventKind: Hashable, Sendable {
     case needsYou(NeedsYouInfo)
     case subagentStarted(id: String, type: String)
     case subagentStopped(id: String)
+    /// Details learnt later, e.g. the model from the `Agent` tool's result.
+    case subagentInfo(id: String, model: String?)
     case turnFinished
     case sessionEnded(reason: String?)
 
@@ -56,7 +58,7 @@ public enum EventKind: Hashable, Sendable {
         switch self {
         case .toolStarted(let tool), .toolFinished(let tool), .toolFailed(let tool, _): tool.agentId
         case .needsYou(let info): info.agentId
-        case .subagentStarted(let id, _), .subagentStopped(let id): id
+        case .subagentStarted(let id, _), .subagentStopped(let id), .subagentInfo(let id, _): id
         default: nil
         }
     }
@@ -111,7 +113,9 @@ public enum Normalizer {
         model: String? = nil, transcriptPath: String? = nil
     ) -> AgentEvent {
         let agentProcess = envelope.agentProcess
-        let hosts = envelope.ancestors.drop { $0.pid != agentProcess?.pid }.dropFirst()
+        // Above the agent process; for IDE-hosted agents, the whole chain (the IDE is the jump target).
+        let hosts = agentProcess.map { agent in Array(envelope.ancestors.drop { $0.pid != agent.pid }.dropFirst()) }
+            ?? envelope.ancestors.filter { !ProcessTree.shells.contains($0.name) }
         return AgentEvent(
             ts: envelope.ts,
             agent: agent,

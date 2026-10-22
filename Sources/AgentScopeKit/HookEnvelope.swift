@@ -28,13 +28,24 @@ public struct HookEnvelope: Sendable {
     public var agentProcess: ProcessEntry? { ProcessTree.agentProcess(in: ancestors) }
     public var tty: String? { ancestors.first { $0.tty != nil }?.tty }
 
-    /// Payloads above this size are shrunk before sending: a `Read` of a large file or an image carries
-    /// all of it in `tool_response`, which nothing downstream needs, and big lines miss the hook's time budget.
-    public static let maxPayloadBytes = 64 * 1024
-    /// Strings in a shrunk payload keep this many characters.
+    /// Strings kept from tool input (commands, paths, patch headers) are cut to this many characters.
     static let maxStringLength = 2000
+    /// Members up to this size are copied byte for byte; larger ones are decoded and shrunk.
+    static let rawCopyLimit = 4096
+    /// Members larger than this are dropped without decoding (keeps the hook fast on huge payloads).
+    static let decodeLimit = 1024 * 1024
 
-    /// Builds the wire line around `rawPayload` without decoding it when it is valid JSON of sane size.
+    /// Never forwarded or spooled: prompt text and model output (CLAUDE.md: no prompt text on disk).
+    static let droppedKeys: Set<String> = [
+        "prompt", "initial_prompt", "initialPrompt", "last_assistant_message", "lastAssistantMessage",
+    ]
+    /// Tool results are dropped except for these small fields (result type, subagent id and model).
+    static let toolResultKeys: Set<String> = ["tool_response", "tool_result", "toolResult"]
+    static let keptResultFields: Set<String> = [
+        "result_type", "resultType", "agentId", "resolvedModel", "status", "isAsync", "interrupted", "is_error", "exitCode", "exit_code",
+    ]
+
+    /// Builds the wire line around a privacy-filtered copy of `rawPayload`.
     public static func line(
         agent: String, event: String?, ts: Date, hookPid: Int32, cwd: String, ancestors: [ProcessEntry], rawPayload: Data
     ) -> Data {
@@ -57,28 +68,49 @@ public struct HookEnvelope: Sendable {
         return line
     }
 
+    /// Drops prompt text and tool output, shrinks big members, and keeps everything else as sent. The
+    /// top level is walked without decoding values, so a 12 MB image read costs a byte scan, not a parse.
     static func sanitizedPayload(_ raw: Data) -> Data {
-        let trimmed = raw.trimmingWhitespace()
-        if trimmed.isEmpty { return Data("null".utf8) }
-        guard let object = try? JSONSerialization.jsonObject(with: trimmed, options: [.fragmentsAllowed]) else {
-            return Data(JSONValue.string(String(decoding: trimmed.prefix(64 * 1024), as: UTF8.self)).compactText.utf8)
+        let bytes = [UInt8](raw.trimmingWhitespace())
+        if bytes.isEmpty { return Data("null".utf8) }
+        guard let members = JSONScanner.topLevelMembers(bytes) else {
+            return Data(JSONValue.string("[unparsed payload, \(bytes.count) bytes]").compactText.utf8)
         }
-        if trimmed.count > maxPayloadBytes, var dictionary = object as? [String: Any] {
-            // Cut long strings and arrays; every field stays, so tool names, paths and commands survive.
-            dictionary = shrink(dictionary) as? [String: Any] ?? [:]
-            dictionary["_agentscope_truncated"] = true
-            if let data = try? JSONSerialization.data(withJSONObject: dictionary), data.count <= maxPayloadBytes { return data }
-            // Still too big (thousands of fields): keep the small top-level ones.
-            var small: [String: Any] = ["_agentscope_truncated": true]
-            for (key, value) in dictionary {
-                if let data = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]), data.count <= 4096 {
-                    small[key] = value
+        var output = Data("{".utf8)
+        var first = true
+        func append(_ key: Range<Int>, _ value: Data) {
+            if !first { output.append(UInt8(ascii: ",")) }
+            first = false
+            output.append(contentsOf: bytes[key])
+            output.append(UInt8(ascii: ":"))
+            output.append(value)
+        }
+        for member in members {
+            if droppedKeys.contains(member.key) { continue }
+            let size = member.value.count
+            if toolResultKeys.contains(member.key) {
+                guard size <= decodeLimit, let object = decode(bytes[member.value]) as? [String: Any] else { continue }
+                var kept = object.filter { keptResultFields.contains($0.key) && !($0.value is [Any]) && !($0.value is [String: Any]) }
+                let type = (object["result_type"] ?? object["resultType"]) as? String
+                if ["failure", "error", "denied"].contains(type ?? ""),
+                   let text = (object["text_result_for_llm"] ?? object["textResultForLlm"]) as? String {
+                    kept["text_result_for_llm"] = String(text.prefix(300))
                 }
+                if !kept.isEmpty, let data = try? JSONSerialization.data(withJSONObject: kept) { append(member.keyRange, data) }
+            } else if size <= rawCopyLimit {
+                // Raw newlines can only be insignificant whitespace in valid JSON.
+                append(member.keyRange, Data(bytes[member.value].map { $0 == 0x0A || $0 == 0x0D ? 0x20 : $0 }))
+            } else if size <= decodeLimit, let value = decode(bytes[member.value]),
+                      let data = try? JSONSerialization.data(withJSONObject: shrink(value), options: [.fragmentsAllowed]) {
+                append(member.keyRange, data)
             }
-            if let data = try? JSONSerialization.data(withJSONObject: small) { return data }
         }
-        // Raw newlines can only be insignificant whitespace in valid JSON; strip them to keep one line.
-        return Data(trimmed.map { $0 == 0x0A || $0 == 0x0D ? 0x20 : $0 })
+        output.append(UInt8(ascii: "}"))
+        return output
+    }
+
+    private static func decode(_ slice: ArraySlice<UInt8>) -> Any? {
+        try? JSONSerialization.jsonObject(with: Data(slice), options: [.fragmentsAllowed])
     }
 
     static func shrink(_ value: Any) -> Any {

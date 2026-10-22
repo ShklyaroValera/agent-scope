@@ -6,11 +6,13 @@ import Testing
 struct EventStoreTests {
     let start = Date(timeIntervalSince1970: 1_800_000_000)
 
+    /// Replays the first `count` fixture files (one hook call each, possibly several events).
     func replay(upTo count: Int? = nil) throws -> (EventStore, [AgentEvent]) {
         let store = EventStore(now: start)
         store.processIsAlive = { _ in true }
-        let events = try FixtureLoader.envelopes("claude", "2.1.283", start: start).flatMap(Normalizer.normalize)
-        store.apply(Array(events.prefix(count ?? events.count)))
+        let envelopes = try FixtureLoader.envelopes("claude", "2.1.283", start: start)
+        let events = envelopes.prefix(count ?? envelopes.count).flatMap(Normalizer.normalize)
+        store.apply(events)
         return (store, events)
     }
 

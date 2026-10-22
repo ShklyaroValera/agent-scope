@@ -137,7 +137,7 @@ public struct CopilotConfigurator: AgentConfigurator {
         for event in Self.events {
             hooks[event] = [[
                 "type": "command",
-                "bash": .string("\(ConfigFile.shellQuoted(hookBinary)) hook --agent copilot --event \(event)"),
+                "bash": .string(ConfigFile.hookCommand(binary: hookBinary, agent: .copilot, event: event)),
                 "timeoutSec": 5,
             ]]
         }

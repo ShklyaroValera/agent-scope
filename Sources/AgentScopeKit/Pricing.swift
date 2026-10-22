@@ -53,7 +53,9 @@ public struct PriceTable: Sendable {
     ])
 
     public func price(for model: String) -> ModelPrice? {
-        let id = model.lowercased()
+        // Copilot writes Claude ids with dots ("claude-opus-5.5").
+        var id = model.lowercased()
+        if id.hasPrefix("claude") { id = id.replacingOccurrences(of: ".", with: "-") }
         return prices.keys.filter { id.hasPrefix($0) }.max { $0.count < $1.count }.flatMap { prices[$0] }
     }
 
@@ -70,8 +72,8 @@ public struct PriceTable: Sendable {
 
     // MARK: - prices.json
 
-    /// `{"claude-opus-5-5": {"input": 4, "output": 20, "cacheRead": 0.2, "contextWindow": 1000000}, …}`
-    /// merged over the defaults.
+    /// Overrides, `{"claude-opus-5-5": {"input": 4, "output": 20, "cacheRead": 0.2, "contextWindow": 1000000}, …}`,
+    /// merged over the built-in defaults (which update with the app; see prices.defaults.json).
     public static func load(from url: URL) -> PriceTable {
         var table = defaults
         guard let json = try? ConfigFile.load(url).json.objectValue else { return table }
@@ -85,6 +87,11 @@ public struct PriceTable: Sendable {
             )
         }
         return table
+    }
+
+    /// Entries of `other` that differ from this table: what a user changed.
+    public func overrides(in other: PriceTable) -> PriceTable {
+        PriceTable(prices: other.prices.filter { prices[$0.key] != $0.value })
     }
 
     public var json: JSONValue {

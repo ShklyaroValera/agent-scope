@@ -11,11 +11,21 @@ struct PopoverView: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             VStack(alignment: .leading, spacing: 0) {
                 header(snapshot)
+                if let message = model.jumpMessage {
+                    Text(message)
+                        .font(.ui(11))
+                        .foregroundStyle(Palette.needsYouText)
+                        .padding(EdgeInsets(top: 0, leading: 16, bottom: 8, trailing: 16))
+                        .fixedSize(horizontal: false, vertical: true)
+                }
                 ForEach(snapshot.pending) { decision in
                     NeedsYouBanner(decision: decision)
                 }
                 if !model.useMockData, !model.settings.setupOfferDismissed, !model.agentsNeedingSetup.isEmpty {
                     SetupOffer(agents: model.agentsNeedingSetup)
+                }
+                if !model.useMockData, model.codexAwaitsTrust {
+                    CodexTrustBanner()
                 }
                 sessions(snapshot, now: context.date)
                 stats(snapshot.today)
@@ -46,7 +56,7 @@ struct PopoverView: View {
             .foregroundStyle(Palette.textTertiary)
             .padding(EdgeInsets(top: 2, leading: 16, bottom: 6, trailing: 16))
 
-        VStack(spacing: 0) {
+        let rows = VStack(spacing: 0) {
             if let error = model.serverError {
                 Text("Can't listen for agent events: \(error)")
                     .font(.ui(11))
@@ -71,14 +81,26 @@ struct PopoverView: View {
             }
         }
         .padding(.horizontal, 8)
+
+        // Many sessions (eval runs, headless agents) must not push the popover off screen.
+        if snapshot.sessions.count > Self.maxVisibleRows {
+            ScrollView { rows }
+                .frame(height: CGFloat(Self.maxVisibleRows) * 58)
+        } else {
+            rows
+        }
     }
+
+    static let maxVisibleRows = 6
 
     private func stats(_ today: DailyStats) -> some View {
         HStack(spacing: 8) {
             StatTile(title: "Tool calls", value: Format.count(today.toolCalls))
             StatTile(title: "Tokens", value: Format.tokens(today.tokens))
-            StatTile(title: "Cost today", value: Format.cost(today.costUSD))
-                .help("Estimated from transcript token counts and prices.json")
+            StatTile(title: "Cost today", value: Format.cost(today.costUSD) + (today.unpricedTokens > 0 ? "+" : ""))
+                .help(today.unpricedTokens > 0
+                    ? "Estimate; \(Format.tokens(today.unpricedTokens)) tokens are from models without a price in prices.json"
+                    : "Estimated from transcript token counts and prices.json")
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
@@ -241,5 +263,25 @@ private struct FooterRow: View {
         .padding(8)
         .background(primary ? Palette.call : .clear, in: RoundedRectangle(cornerRadius: 7))
         .contentShape(Rectangle())
+    }
+}
+
+/// Codex skips new hooks until approved; without this the user would wait for events forever.
+private struct CodexTrustBanner: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Approve AgentScope in Codex")
+                .font(.ui(12, .semibold))
+                .foregroundStyle(Palette.bannerTitle)
+            Text("Codex runs new hooks only after you trust them: start `codex`, type /hooks and approve the AgentScope entries. Until then Codex sessions show without tool calls.")
+                .font(.ui(11))
+                .foregroundStyle(Palette.textSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Palette.bannerBackground, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.bannerBorder))
+        .padding(EdgeInsets(top: 0, leading: 12, bottom: 10, trailing: 12))
     }
 }

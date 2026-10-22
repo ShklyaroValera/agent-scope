@@ -49,6 +49,8 @@ public struct DailyStats: Hashable, Sendable {
     public var costUSD: Double
     /// The same totals per agent.
     public var byAgent: [AgentKind: AgentStats]
+    /// Tokens from models with no price in prices.json; the cost total leaves them out.
+    public var unpricedTokens = 0
 
     public struct AgentStats: Hashable, Sendable {
         public var toolCalls = 0
@@ -71,7 +73,8 @@ public struct DailyStats: Hashable, Sendable {
 
     public static let zero = DailyStats(toolCalls: 0, tokens: 0, costUSD: 0)
 
-    mutating func add(_ agent: AgentKind?, toolCalls: Int = 0, tokens: Int = 0, costUSD: Double = 0) {
+    mutating func add(_ agent: AgentKind?, toolCalls: Int = 0, tokens: Int = 0, costUSD: Double = 0, unpriced: Bool = false) {
+        if unpriced { unpricedTokens += tokens }
         self.toolCalls += toolCalls
         self.tokens += tokens
         self.costUSD += costUSD

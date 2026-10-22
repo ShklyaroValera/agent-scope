@@ -210,7 +210,8 @@ struct PermissionCardView: View {
     }
 }
 
-/// The pulsing (needs you) and glowing (selected) rings around session nodes.
+/// The pulsing (needs you) and glowing (selected) rings around session nodes, as repeating Core
+/// Animations rather than per-frame redraws.
 struct NodeHalo: ViewModifier {
     enum Style {
         case pulse(Color)
@@ -220,30 +221,29 @@ struct NodeHalo: ViewModifier {
     let style: Style?
     let cornerRadius: CGFloat
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var animating = false
 
     func body(content: Content) -> some View {
-        if let style {
-            content.background {
-                TimelineView(.animation(minimumInterval: 1 / 30, paused: reduceMotion)) { context in
-                    let (color, spread, opacity) = ring(style, time: reduceMotion ? 0.5 : context.date.timeIntervalSinceReferenceDate)
-                    RoundedRectangle(cornerRadius: cornerRadius + spread)
-                        .fill(color.opacity(opacity))
-                        .padding(-spread)
-                }
-            }
-        } else {
-            content
-        }
-    }
-
-    private func ring(_ style: Style, time: TimeInterval) -> (Color, CGFloat, Double) {
         switch style {
-        case .pulse(let color):
-            let progress = min((time.truncatingRemainder(dividingBy: 1.8) / 1.8) / 0.7, 1)
-            return (color, 10 * progress, 0.45 * (1 - progress))
-        case .glow(let color):
-            let wave = (1 - cos(time / 2.4 * 2 * .pi)) / 2
-            return (color, 4 + 4 * wave, 0.10 + 0.06 * wave)
+        case .pulse(let color)?:
+            content.background {
+                RoundedRectangle(cornerRadius: cornerRadius)
+                    .stroke(color, lineWidth: 2)
+                    .padding(animating && !reduceMotion ? -10 : 0)
+                    .opacity(reduceMotion ? 0.3 : animating ? 0 : 0.45)
+                    .animation(reduceMotion ? nil : .easeOut(duration: 1.8).repeatForever(autoreverses: false), value: animating)
+                    .onAppear { animating = true }
+            }
+        case .glow(let color)?:
+            content.background {
+                RoundedRectangle(cornerRadius: cornerRadius + 6)
+                    .fill(color.opacity(animating && !reduceMotion ? 0.16 : 0.10))
+                    .padding(-6)
+                    .animation(reduceMotion ? nil : .easeInOut(duration: 1.2).repeatForever(autoreverses: true), value: animating)
+                    .onAppear { animating = true }
+            }
+        case nil:
+            content
         }
     }
 }

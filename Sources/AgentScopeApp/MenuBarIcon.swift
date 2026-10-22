@@ -4,7 +4,19 @@ import AppKit
 /// Draws the menu bar glyph from `design/menubar-popover.html`: a three-node graph, the active count and
 /// an attention dot. Without a dot the image is a template so macOS tints it; with one it draws in
 /// `labelColor`, which resolves against the menu bar's appearance at draw time.
+@MainActor
 enum MenuBarIcon {
+    private static var cache: [String: NSImage] = [:]
+
+    /// The same image object for the same state, so the status item is not redrawn on every refresh.
+    static func cachedImage(activeCount: Int, attention: Attention?) -> NSImage {
+        let key = "\(activeCount)-\(String(describing: attention))"
+        if let image = cache[key] { return image }
+        let image = image(activeCount: activeCount, attention: attention)
+        cache[key] = image
+        return image
+    }
+
     static func image(activeCount: Int, attention: Attention?) -> NSImage {
         let font = NSFont.systemFont(ofSize: 12, weight: .semibold)
         let text = activeCount > 0 ? "\(activeCount)" as NSString : nil

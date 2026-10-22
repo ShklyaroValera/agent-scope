@@ -12,20 +12,20 @@ struct TranscriptTests {
 
     @Test func claudeCountsEachResponseOnce() throws {
         let samples = samples("claude-2.1.283.jsonl", .claude)
-        let usage = samples.filter { $0.sessionTotalCostUSD == nil }
+        let usage = samples
         #expect(usage.count == 8)
         #expect(usage.reduce(0) { $0 + $1.tokens } == 35_912)
         #expect(usage.reduce(0) { $0 + $1.cacheRead } == 227_660)
         #expect(usage.allSatisfy { $0.model == "claude-haiku-4-5-20251001" })
         #expect(usage.last?.contextTokens == 34_444)
-        #expect(samples.last?.sessionTotalCostUSD == 0.1169888)
     }
 
-    @Test func claudeCostEndsAtReportedTotal() {
+    /// Haiku 4.5: 67 in × $1 + 1 411 out × $5 + 34 434 1-hour cache writes × $2 + 227 660 cache reads × $0.10.
+    @Test func claudeCostIsEstimatedFromTheSameTokens() {
         var accumulator = UsageAccumulator()
         let deltas = samples("claude-2.1.283.jsonl", .claude).map { accumulator.delta(for: $0, prices: .defaults) }
         let total = deltas.compactMap(\.costUSD).reduce(0, +)
-        #expect(abs(total - 0.1169888) < 1e-9)
+        #expect(abs(total - 0.098756) < 1e-9)
         #expect(deltas.compactMap(\.contextUsed).last == 34_444.0 / 200_000)
     }
 
@@ -97,6 +97,31 @@ struct TranscriptTests {
     }
 }
 
+struct SubagentTranscriptTests {
+    let fixtures = FixtureLoader.root.appending(path: "transcripts")
+
+    @Test func subagentUsageCountsTowardItsSessionAndStartTimeIsRead() throws {
+        let home = FileManager.default.temporaryDirectory.appending(path: "subagents-\(UUID().uuidString)")
+        let project = home.appending(path: ".claude/projects/-Users-me-dev-demo")
+        let subagents = project.appending(path: "4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4/subagents")
+        try FileManager.default.createDirectory(at: subagents, withIntermediateDirectories: true)
+        let main = project.appending(path: "4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4.jsonl")
+        try FileManager.default.copyItem(at: fixtures.appending(path: "claude-2.1.283.jsonl"), to: main)
+        try FileManager.default.copyItem(at: fixtures.appending(path: "claude-2.1.283.jsonl"), to: subagents.appending(path: "agent-a1.jsonl"))
+
+        let monitor = TranscriptMonitor(home: home)
+        #expect(monitor.scan(modifiedSince: .distantPast) == 2)
+        let updates = monitor.poll()
+        #expect(updates.count == 16)
+        #expect(Set(updates.map(\.sessionId)) == ["4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4"])
+        // Only the main transcript is offered as a session.
+        try FileManager.default.setAttributes([.modificationDate: Date()], ofItemAtPath: main.path)
+        #expect(monitor.discover(knownSessionIds: []).map { URL(fileURLWithPath: $0.path).lastPathComponent } == [main.lastPathComponent])
+        #expect(monitor.takeStartTimes().map(\.sessionId) == ["4f16a7d7-d2e1-4a39-a9c0-7c61b4c073e4"])
+        #expect(monitor.poll().isEmpty)
+    }
+}
+
 struct PricingTests {
     @Test func longestPrefixWins() {
         #expect(PriceTable.defaults.price(for: "claude-opus-5-5")?.input == 4)
@@ -115,5 +140,15 @@ struct PricingTests {
 
         try Data(table.json.formatted().utf8).write(to: url)
         #expect(PriceTable.load(from: url).prices == table.prices)
+    }
+}
+
+struct PriceOverrideTests {
+    @Test func dottedClaudeIdsAndOverrides() {
+        #expect(PriceTable.defaults.price(for: "claude-opus-5.5")?.input == 4)
+        var changed = PriceTable.defaults
+        changed.prices["claude-opus-5-5"] = ModelPrice(input: 3, output: 15)
+        #expect(Array(PriceTable.defaults.overrides(in: changed).prices.keys) == ["claude-opus-5-5"])
+        #expect(PriceTable.defaults.overrides(in: .defaults).prices.isEmpty)
     }
 }

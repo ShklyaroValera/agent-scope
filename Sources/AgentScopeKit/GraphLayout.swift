@@ -38,6 +38,18 @@ public struct GraphModel: Sendable {
     public var size: CGSize
 
     public static let empty = GraphModel(nodes: [], edges: [], size: .zero)
+
+    /// The area a session and everything under it occupy, for focusing on it.
+    public func bounds(ofSession sessionId: String) -> CGRect? {
+        let frames = nodes.compactMap { node -> CGRect? in
+            switch node.kind {
+            case .session(let id), .subagent(let id, _), .tool(let id, _), .permission(let id): id == sessionId ? node.frame : nil
+            case .root: nil
+            }
+        }
+        guard let first = frames.first else { return nil }
+        return frames.dropFirst().reduce(first) { $0.union($1) }.insetBy(dx: -24, dy: -24)
+    }
 }
 
 /// Builds the agent tree "This Mac → sessions → subagents / permission → tool calls" and lays it out
@@ -47,7 +59,7 @@ public enum GraphBuilder {
         public var root = CGSize(width: 170, height: 56)
         public var session = CGSize(width: 184, height: 70)
         public var subagent = CGSize(width: 130, height: 60)
-        public var tool = CGSize(width: 150, height: 38)
+        public var tool = CGSize(width: 184, height: 38)
         public var permission = CGSize(width: 210, height: 118)
         public var horizontalGap: CGFloat = 40
         public var verticalGap: CGFloat = 76
@@ -58,6 +70,8 @@ public enum GraphBuilder {
     /// How long a finished call keeps its green "answer" flow.
     public static let answerFlowDuration: TimeInterval = 8
     public static let maxSubagents = 4
+    /// Finished subagents stay in the graph this long.
+    public static let finishedSubagentRetention: TimeInterval = 20
 
     private struct Item {
         var id: String
@@ -112,7 +126,11 @@ public enum GraphBuilder {
             ))
         }
 
-        let subagents = state.nodes.filter { $0.parentId != nil }
+        // Running subagents, plus finished ones for a few seconds so the answer is seen arriving.
+        let subagents = state.nodes.filter { node in
+            node.parentId != nil && (node.isActive
+                || node.finishedAt.map { now.timeIntervalSince($0) < finishedSubagentRetention } ?? false)
+        }
         let shown = Array((subagents.filter(\.isActive) + subagents.filter { !$0.isActive }.reversed()).prefix(maxSubagents))
         let shownIds = Set(shown.map(\.id))
         for node in subagents where shownIds.contains(node.id) {

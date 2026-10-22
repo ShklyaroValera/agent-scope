@@ -9,8 +9,10 @@ struct GraphPanel: View {
         let states = Array(store.sessions.values)
         VStack(spacing: 0) {
             header(states, store: store)
+            // Rebuilt when sessions change, not every second; the timeline only refreshes elapsed times.
+            let graph = GraphBuilder.build(sessions: states, now: Date())
             TimelineView(.periodic(from: .now, by: 1)) { context in
-                GraphView(graph: GraphBuilder.build(sessions: states, now: context.date), states: store.sessions, now: context.date)
+                GraphView(graph: graph, states: store.sessions, now: context.date)
             }
             .background(Palette.card, in: RoundedRectangle(cornerRadius: 14))
             .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Palette.hairline))
@@ -18,7 +20,9 @@ struct GraphPanel: View {
             .padding(EdgeInsets(top: 20, leading: 20, bottom: 0, trailing: 20))
             .layoutPriority(1)
             Legend()
-            FeedView(items: store.feed)
+            FeedView(items: store.feed, selected: model.selectedSessionId.flatMap { store.sessions[$0] }?.session) {
+                model.selectedSessionId = nil
+            }
                 .frame(height: 170)
                 .padding(EdgeInsets(top: 0, leading: 20, bottom: 16, trailing: 20))
         }
@@ -93,6 +97,9 @@ private struct Legend: View {
 
 struct FeedView: View {
     let items: [FeedItem]
+    /// When set, only this session's lines.
+    var selected: Session?
+    var showAll: () -> Void = {}
 
     private static let time: DateFormatter = {
         let formatter = DateFormatter()
@@ -101,14 +108,26 @@ struct FeedView: View {
     }()
 
     var body: some View {
+        let shown = selected.map { session in items.filter { $0.sessionId == session.id } } ?? items
         SnapshotSafeScroll {
             LazyVStack(alignment: .leading, spacing: 0) {
-                if items.isEmpty {
+                if let selected {
+                    HStack(spacing: 8) {
+                        Text("\(selected.agent.displayName) · \(selected.project)").foregroundStyle(Color(hex: 0xD1D1D6))
+                        Button(action: showAll) {
+                            Text("Show all").foregroundStyle(Color(hex: 0x6E9BF5))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .frame(height: 22)
+                }
+                if shown.isEmpty {
                     Text("Waiting for agent activity…").foregroundStyle(Color(hex: 0x8E8E93))
                 }
-                ForEach(items) { item in
+                ForEach(shown) { item in
                     (Text(Self.time.string(from: item.ts)).foregroundStyle(Color(hex: 0x8E8E93))
                         + Text("  " + item.agent.rawValue.padding(toLength: 8, withPad: " ", startingAt: 0)).foregroundStyle(Palette.feedAgent(item.agent))
+                        + Text(Format.truncated(item.project, to: 16).padding(toLength: 17, withPad: " ", startingAt: 0)).foregroundStyle(Color(hex: 0x8E8E93))
                         + Text(item.message).foregroundStyle(Palette.feedMessage(item.status)))
                         .lineLimit(1)
                         .frame(height: 19, alignment: .leading)

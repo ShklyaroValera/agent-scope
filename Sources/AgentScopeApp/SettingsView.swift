@@ -46,16 +46,6 @@ struct SettingsView: View {
             }
 
             Section {
-                Toggle("Allow / Deny from AgentScope", isOn: .constant(false))
-                    .disabled(true)
-            } header: {
-                Text("Permissions")
-            } footer: {
-                Text("Answering permission prompts from AgentScope comes in a later version. Use Jump to for now.")
-                    .font(.ui(11)).foregroundStyle(.secondary)
-            }
-
-            Section {
                 HStack {
                     Button("Open prices.json") { NSWorkspace.shared.open(model.paths.prices) }
                     Button("Reload") { model.loadPrices() }
@@ -63,7 +53,7 @@ struct SettingsView: View {
             } header: {
                 Text("Cost estimates")
             } footer: {
-                Text("Costs are estimates: tokens from agent transcripts × per-million-token prices. Claude Code's own totals win when it reports them. Copilot is subscription-based and shows tool calls only.")
+                Text("Costs are estimates: tokens from agent transcripts (subagents included) × per-million-token prices. prices.json holds your overrides; prices.defaults.json lists the built-in prices. Copilot is subscription-based and shows tool calls only.")
                     .font(.ui(11)).foregroundStyle(.secondary)
             }
 

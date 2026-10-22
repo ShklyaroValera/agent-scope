@@ -14,7 +14,13 @@ cask "agentscope" do
   app "AgentScope.app"
   binary "#{appdir}/AgentScope.app/Contents/Helpers/agentscope"
 
-  uninstall quit: "io.github.shklyarovalera.agentscope"
+  # Take AgentScope's hooks out of the agents' configs before the app goes away.
+  uninstall quit:   "io.github.shklyarovalera.agentscope",
+            script: {
+              executable: "#{appdir}/AgentScope.app/Contents/Helpers/agentscope",
+              args:       ["uninstall"],
+              sudo:       false,
+            }
 
   zap trash: [
     "~/Library/Application Support/AgentScope",
@@ -24,7 +30,6 @@ cask "agentscope" do
   caveats <<~EOS
     Connect your agents (Claude Code, Codex, Copilot CLI):
       agentscope setup
-    Before uninstalling, remove the hooks again:
-      agentscope uninstall
+    `brew uninstall` removes the hooks again (same as `agentscope uninstall`).
   EOS
 end

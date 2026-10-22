@@ -109,7 +109,9 @@ public final class SocketServer: @unchecked Sendable {
     private let handler: Handler
     private var listener: Int32 = -1
     private var source: DispatchSourceRead?
-    private let connections = DispatchQueue(label: "agentscope.socket.connections", attributes: .concurrent)
+    /// Serial: events from different hook processes are handled in arrival order (a late "started" can
+    /// otherwise land after its "finished"). Hooks send one small line each, so nothing waits long.
+    private let connections = DispatchQueue(label: "agentscope.socket.connections")
 
     public init(path: String, handler: @escaping Handler) {
         self.path = path
@@ -199,12 +201,22 @@ public enum Spool {
         _ = line.withUnsafeBytes { Darwin.write(fd, $0.baseAddress!, $0.count) }
     }
 
-    /// Moves the spool aside and returns its lines, oldest first.
-    public static func drain(_ url: URL) -> [Data] {
+    /// Moves the spool aside so new hook calls start a fresh one. Read the claimed file with `read(_:)`
+    /// a moment later: a hook that opened the spool just before the rename may still be writing to it.
+    public static func claim(_ url: URL) -> URL? {
         let claimed = url.appendingPathExtension("draining")
-        guard rename(url.path, claimed.path) == 0 || FileManager.default.fileExists(atPath: claimed.path) else { return [] }
+        guard rename(url.path, claimed.path) == 0 || FileManager.default.fileExists(atPath: claimed.path) else { return nil }
+        return claimed
+    }
+
+    /// Lines of a claimed spool, oldest first; deletes it.
+    public static func read(_ claimed: URL) -> [Data] {
         defer { unlink(claimed.path) }
         guard let data = try? Data(contentsOf: claimed) else { return [] }
         return data.split(separator: 0x0A).map { Data($0) }
+    }
+
+    public static func drain(_ url: URL) -> [Data] {
+        claim(url).map(read) ?? []
     }
 }

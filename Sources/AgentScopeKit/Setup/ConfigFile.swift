@@ -77,6 +77,13 @@ public enum ConfigFile {
         return Data(json.formatted(indent: indent).utf8)
     }
 
+    /// The command agents run: skipped harmlessly (exit 0) when the app was moved or deleted, so a
+    /// removed AgentScope never makes every tool call report a hook error.
+    public static func hookCommand(binary: String, agent: AgentKind, event: String, extra: String = "") -> String {
+        let quoted = shellQuoted(binary)
+        return "test -x \(quoted) && \(quoted) hook --agent \(agent.rawValue) --event \(event)\(extra) || true"
+    }
+
     /// Shell-quotes a path for a hook command line.
     public static func shellQuoted(_ path: String) -> String {
         let safe = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "/._-+:@"))

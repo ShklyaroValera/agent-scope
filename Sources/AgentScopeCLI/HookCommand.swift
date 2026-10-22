@@ -23,8 +23,6 @@ enum HookCommand {
         }
 
         let raw = readStdin()
-        // `agentscope doctor` times the hook with this agent name; nothing to deliver.
-        if agent == "doctor" { return }
         let paths = AgentScopePaths.default
         let now = Date()
         let pid = getpid()
@@ -42,17 +40,29 @@ enum HookCommand {
             ancestors: ProcessTree.ancestors(of: getppid()),
             rawPayload: raw
         )
+        // `agentscope doctor` times the full hook with this agent name; nothing to deliver.
+        if agent == "doctor" { return }
         if !SocketClient.send(line, to: paths.socket.path, timeout: connectTimeout, writeTimeout: sendTimeout) {
             try? FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
             Spool.append(line, to: paths.spool)
         }
     }
 
+    /// Agents write the payload and close stdin at once; never wait on a pipe that stays open.
+    static let stdinTimeout: TimeInterval = 0.5
+
     private static func readStdin() -> Data {
         guard isatty(STDIN_FILENO) == 0 else { return Data() }
+        let deadline = Date().addingTimeInterval(stdinTimeout)
         var data = Data()
         var buffer = [UInt8](repeating: 0, count: 64 * 1024)
         while data.count < maxStdinBytes {
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { break }
+            var descriptor = pollfd(fd: STDIN_FILENO, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&descriptor, 1, Int32(remaining * 1000))
+            if ready < 0, errno == EINTR { continue }
+            guard ready > 0 else { break }
             let count = read(STDIN_FILENO, &buffer, buffer.count)
             if count > 0 { data.append(buffer, count: count) } else if count == 0 || errno != EINTR { break }
         }

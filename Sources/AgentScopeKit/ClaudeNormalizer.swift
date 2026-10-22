@@ -93,10 +93,18 @@ struct HookPayloadNormalizer {
         }
 
         guard let kind else { return [] }
-        return [Normalizer.event(
-            envelope, agent: agent, sessionId: sessionId, cwd: cwd, kind: kind,
-            model: string("model"), transcriptPath: string("transcript_path", "transcriptPath")
-        )]
+        var kinds = [kind]
+        // The Agent tool's result names the subagent and the model it runs on.
+        let result = payload["tool_response"] ?? payload["toolResult"]
+        if name == "posttooluse", let subagent = result?["agentId"]?.stringValue {
+            kinds.append(.subagentInfo(id: subagent, model: result?["resolvedModel"]?.stringValue))
+        }
+        return kinds.map {
+            Normalizer.event(
+                envelope, agent: agent, sessionId: sessionId, cwd: cwd, kind: $0,
+                model: string("model"), transcriptPath: string("transcript_path", "transcriptPath")
+            )
+        }
     }
 
     /// Stable across processes, unlike `Hasher`.

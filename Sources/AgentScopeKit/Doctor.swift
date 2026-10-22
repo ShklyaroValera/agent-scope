@@ -83,9 +83,10 @@ public enum Doctor {
         return checks
     }
 
-    /// The program a hook command runs (first word, quotes removed).
+    /// The program a hook command runs (first word, quotes removed; after `test -x` for guarded commands).
     static func executable(of command: String) -> String? {
-        let trimmed = command.trimmingCharacters(in: .whitespaces)
+        var trimmed = command.trimmingCharacters(in: .whitespaces)
+        if trimmed.hasPrefix("test -x ") { trimmed = String(trimmed.dropFirst(8)) }
         if trimmed.hasPrefix("'") {
             return trimmed.dropFirst().split(separator: "'", maxSplits: 1).first.map(String.init)
         }

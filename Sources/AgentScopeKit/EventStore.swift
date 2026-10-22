@@ -12,7 +12,7 @@ public struct FeedItem: Identifiable, Hashable, Sendable {
 }
 
 /// Everything known about one session: the session itself, its agent tree and recent tool calls.
-public struct SessionState: Sendable {
+public struct SessionState: Sendable, Equatable {
     public var session: Session
     /// The main agent first, then subagents in start order.
     public var nodes: [AgentNode]
@@ -20,6 +20,10 @@ public struct SessionState: Sendable {
     public var calls: [ToolCall]
     public var pending: PendingDecision?
     public var pendingAgentId: String?
+    /// The blocked call, so only its own result clears the request.
+    public var pendingTool: String?
+    public var pendingSummary: String?
+    public var pendingSince: Date?
     public var pendingVisibleAt: Date?
     var pendingLogged = false
     public var failedTool: String?
@@ -33,6 +37,9 @@ public struct SessionState: Sendable {
     public var transcriptOnly = false
     /// How a transcript-only session was started, to match it to a live process.
     public var launcher: Launcher?
+    /// The agent process's start time, to tell it from a later process that reuses the pid.
+    public var pidStart: Double?
+    public var turnFinishedAt: Date?
 
     public var mainNodeId: String { SessionState.nodeId(session: session.id, agentId: nil) }
 
@@ -85,6 +92,12 @@ public final class EventStore {
     /// Ended sessions stay visible this long.
     public var endedRetention: TimeInterval = 2 * 60
     @ObservationIgnored public var processIsAlive: (Int32) -> Bool = ProcessTree.isAlive
+    @ObservationIgnored public var processStartTime: (Int32) -> Double? = ProcessTree.startTime
+    /// Without a process of their own (IDE-hosted agents), turns end after this much silence — longer
+    /// while a tool call is still running.
+    public var hostedQuietLimit: TimeInterval = 2 * 60
+    public var hostedQuietLimitDuringCall: TimeInterval = 5 * 60
+
 
     @ObservationIgnored private var callStarts: [Date] = []
     @ObservationIgnored private var lastFailureAt: Date?
@@ -115,19 +128,18 @@ public final class EventStore {
         )
         state.session.lastEventAt = max(state.session.lastEventAt, event.ts)
         if case .sessionStarted(source: "transcript") = event.kind {} else { state.transcriptOnly = false }
-        if let pid = event.pid { state.session.pid = pid }
+        if let pid = event.pid, state.session.pid != pid {
+            state.session.pid = pid
+            state.pidStart = processStartTime(pid)
+        }
         if let model = event.model { state.session.model = model; state.nodes[0].model = model }
         if let tty = event.tty { state.tty = tty }
         if !event.hostProcesses.isEmpty { state.hostProcesses = event.hostProcesses }
         if let path = event.transcriptPath { state.transcriptPath = path }
 
-        if state.pending != nil {
-            switch event.kind {
-            case .needsYou: break
-            case .promptSubmitted, .turnFinished, .sessionEnded: state.pending = nil
-            default: if event.kind.agentId == state.pendingAgentId { state.pending = nil }
-            }
-            if state.pending == nil { state.pendingVisibleAt = nil }
+        if state.pending != nil, Self.resolvesPending(event, state) {
+            state.pending = nil
+            state.pendingVisibleAt = nil
         }
 
         let project = state.session.project
@@ -177,8 +189,15 @@ public final class EventStore {
             lastFailureAt = max(lastFailureAt ?? .distantPast, event.ts)
             log("\(tool.agentType.map { "\($0) → " } ?? "")\(ToolSummary.displayName(tool.tool)) failed" + (error.map { ": \(Format.truncated($0, to: 80))" } ?? ""), .failed)
 
+        case .needsYou(let info) where state.pending != nil && info.tool == nil && (info.agentId == nil || info.agentId == state.pendingAgentId):
+            // A Notification about the prompt PermissionRequest already reported: same request.
+            break
+
         case .needsYou(let info):
             let summary = info.summary.flatMap { $0.isEmpty ? nil : $0 } ?? info.tool.map(ToolSummary.displayName) ?? info.message
+            state.pendingTool = info.tool
+            state.pendingSummary = info.summary
+            state.pendingSince = event.ts
             state.pending = PendingDecision(
                 id: "\(event.sessionId)-\(Int(event.ts.timeIntervalSince1970 * 1000))",
                 sessionId: event.sessionId, agent: event.agent, project: project, summary: summary
@@ -192,6 +211,7 @@ public final class EventStore {
             let nodeId = SessionState.nodeId(session: event.sessionId, agentId: id)
             if let index = state.nodes.firstIndex(where: { $0.id == nodeId }) {
                 state.nodes[index].status = .working
+                state.nodes[index].finishedAt = nil
             } else {
                 state.nodes.append(AgentNode(id: nodeId, sessionId: event.sessionId, parentId: state.mainNodeId, name: type, status: .working))
             }
@@ -201,11 +221,18 @@ public final class EventStore {
             let nodeId = SessionState.nodeId(session: event.sessionId, agentId: id)
             if let index = state.nodes.firstIndex(where: { $0.id == nodeId }) {
                 state.nodes[index].status = .answered
+                state.nodes[index].finishedAt = event.ts
                 closeCalls(of: nodeId, at: event.ts, in: &state)
                 log("\(state.nodes[index].name) ✓ finished", .answered)
             }
 
+        case .subagentInfo(let id, let model):
+            if let model, let index = state.nodes.firstIndex(where: { $0.id == SessionState.nodeId(session: event.sessionId, agentId: id) }) {
+                state.nodes[index].model = model
+            }
+
         case .turnFinished:
+            state.turnFinishedAt = event.ts
             state.turnActive = false
             state.failedTool = nil
             closeCalls(of: state.mainNodeId, at: event.ts, in: &state)
@@ -231,17 +258,25 @@ public final class EventStore {
     public func tick(now: Date = Date()) {
         rollDay(to: now)
         callStarts.removeAll { now.timeIntervalSince($0) > 60 }
-        for (id, var state) in sessions {
+        for (id, original) in sessions {
+            var state = original
             let quiet = now.timeIntervalSince(state.session.lastEventAt)
-            if !state.ended, let pid = state.session.pid, !processIsAlive(pid) {
+            if !state.ended, let pid = state.session.pid, !isSameProcess(pid, startedAt: state.pidStart) {
                 state.ended = true
                 state.turnActive = false
                 state.pending = nil
                 for index in state.nodes.indices { state.nodes[index].status = .idle }
             }
-            if state.turnActive, quiet > (state.transcriptOnly ? Self.transcriptActivityWindow : staleAfter) {
+            if state.turnActive, quiet > quietLimit(state) {
                 state.turnActive = false
                 for index in state.nodes.indices where state.nodes[index].parentId != nil { state.nodes[index].status = .idle }
+                if state.session.pid == nil, !state.transcriptOnly {
+                    // Stopped in the IDE: no Stop event will come.
+                    for index in state.calls.indices where state.calls[index].finishedAt == nil {
+                        state.calls[index].finishedAt = now
+                        state.calls[index].status = .idle
+                    }
+                }
             }
             if let pending = state.pending, !state.pendingLogged, state.isPendingVisible(at: now) {
                 state.pendingLogged = true
@@ -253,10 +288,54 @@ public final class EventStore {
             updateStatus(&state, now: now)
             if (state.ended && quiet > endedRetention) || (state.session.status == .idle && quiet > removeAfter) {
                 sessions[id] = nil
-            } else {
+            } else if state != original {
+                // Only real changes reach observers; an unchanged write would redraw every view each second.
                 sessions[id] = state
             }
         }
+    }
+
+    private func quietLimit(_ state: SessionState) -> TimeInterval {
+        if state.transcriptOnly { return Self.transcriptActivityWindow }
+        guard state.session.pid == nil else { return staleAfter }
+        return state.calls.contains { $0.finishedAt == nil } ? hostedQuietLimitDuringCall : hostedQuietLimit
+    }
+
+    private func isSameProcess(_ pid: Int32, startedAt: Double?) -> Bool {
+        guard processIsAlive(pid) else { return false }
+        guard let startedAt, let current = processStartTime(pid) else { return true }
+        return abs(current - startedAt) < 1
+    }
+
+    /// Whether `event` answers the pending permission request: its own call reporting back, the turn
+    /// moving on, or the same agent clearly doing something else.
+    static func resolvesPending(_ event: AgentEvent, _ state: SessionState) -> Bool {
+        func isPendingCall(_ tool: ToolEvent) -> Bool {
+            tool.agentId == state.pendingAgentId
+                && (state.pendingTool.map { $0.caseInsensitiveCompare(tool.tool) == .orderedSame } ?? true)
+                && (state.pendingSummary.map { $0 == tool.summary } ?? true)
+        }
+        switch event.kind {
+        case .promptSubmitted, .turnFinished, .sessionEnded:
+            return true
+        case .toolFinished(let tool), .toolFailed(let tool, _):
+            return isPendingCall(tool)
+        case .toolStarted(let tool):
+            // A denied call never reports back; the agent starting another call afterwards means it moved on.
+            let afterwards = state.pendingSince.map { event.ts.timeIntervalSince($0) > 1 } ?? false
+            return tool.agentId == state.pendingAgentId && afterwards && !isPendingCall(tool)
+        case .subagentStopped(let id):
+            return id == state.pendingAgentId
+        default:
+            return false
+        }
+    }
+
+    /// Moves a session's start back to its transcript's first entry (the app may have started later).
+    public func adjustStart(sessionId: String, to date: Date) {
+        guard var state = sessions[sessionId], date < state.session.startedAt else { return }
+        state.session.startedAt = date
+        sessions[sessionId] = state
     }
 
     public func callsPerMinute(now: Date = Date()) -> Int {
@@ -281,7 +360,7 @@ public final class EventStore {
         sessionId: String, agent: AgentKind? = nil, tokens: Int, costUSD: Double?, contextUsed: Double?, model: String?, at date: Date
     ) {
         if rollDay(to: date) {
-            today.add(agent ?? sessions[sessionId]?.session.agent, tokens: tokens, costUSD: costUSD ?? 0)
+            today.add(agent ?? sessions[sessionId]?.session.agent, tokens: tokens, costUSD: costUSD ?? 0, unpriced: costUSD == nil)
         }
         guard var state = sessions[sessionId] else { return }
         // Transcript activity keeps sessions without hooks listed, and is their only sign of work.

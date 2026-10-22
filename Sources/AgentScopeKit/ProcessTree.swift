@@ -54,6 +54,16 @@ public enum ProcessTree {
         return result
     }
 
+    /// Process start time (seconds since 1970); with the pid it identifies a process even after pid reuse.
+    public static func startTime(_ pid: Int32) -> Double? {
+        var info = kinfo_proc()
+        var size = MemoryLayout<kinfo_proc>.stride
+        var mib: [Int32] = [CTL_KERN, KERN_PROC, KERN_PROC_PID, pid]
+        guard sysctl(&mib, 4, &info, &size, nil, 0) == 0, size > 0 else { return nil }
+        let start = info.kp_proc.p_starttime
+        return Double(start.tv_sec) + Double(start.tv_usec) / 1_000_000
+    }
+
     public static func isAlive(_ pid: Int32) -> Bool {
         kill(pid, 0) == 0 || errno == EPERM
     }
@@ -67,9 +77,17 @@ public enum ProcessTree {
 
     static let shells: Set<String> = ["sh", "bash", "zsh", "dash", "fish", "env", "agentscope"]
 
-    /// The agent process behind a hook: the nearest ancestor that is not a shell wrapper.
+    /// The agent process behind a hook: the nearest ancestor that is not a shell wrapper — if it is an
+    /// agent binary. Agents hosted by an IDE (Copilot in VS Code runs hooks from the long-lived extension
+    /// host) have no process of their own, so their sessions cannot be ended by watching a pid.
     public static func agentProcess(in ancestors: [ProcessEntry]) -> ProcessEntry? {
-        ancestors.first { !shells.contains($0.name) }
+        guard let nearest = ancestors.first(where: { !shells.contains($0.name) }) else { return nil }
+        return isAgentBinary(nearest) ? nearest : nil
+    }
+
+    static func isAgentBinary(_ process: ProcessEntry) -> Bool {
+        let path = process.path ?? ""
+        return ["claude", "codex", "copilot", "node"].contains(process.name) || path.contains("/claude/versions/")
     }
 }
 
