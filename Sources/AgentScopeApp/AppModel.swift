@@ -13,6 +13,7 @@ enum MainTab: String, CaseIterable, Identifiable {
 @Observable
 final class AppModel {
     static let graphWindowId = "graph"
+    static let shared = AppModel()
 
     let store = EventStore()
     let settings = AppSettings()

@@ -5,11 +5,9 @@ import SwiftUI
 @main
 struct AgentScopeApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @State private var model = AppModel()
-
-    init() {
-        appDelegate.model = model
-    }
+    /// The one model the views and the app delegate share. SwiftUI may build `App` more than once, so
+    /// creating the model here (even in `@State`) gave the delegate a different instance than the views.
+    private let model = AppModel.shared
 
     var body: some Scene {
         MenuBarExtra {
@@ -36,7 +34,7 @@ struct AgentScopeApp: App {
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    var model: AppModel?
+    private var model: AppModel? { MainActor.assumeIsolated { AppModel.shared } }
 
     func applicationWillFinishLaunching(_ notification: Notification) {
         // The bundle sets LSUIElement; this covers `swift run AgentScopeApp` without a bundle.
