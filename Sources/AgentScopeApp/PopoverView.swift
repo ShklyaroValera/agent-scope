@@ -28,6 +28,9 @@ struct PopoverView: View {
                     CodexTrustBanner()
                 }
                 sessions(snapshot, now: context.date)
+                if !snapshot.limits.isEmpty {
+                    limits(snapshot.limits, now: context.date)
+                }
                 stats(snapshot.today)
                 footer
             }
@@ -86,6 +89,17 @@ struct PopoverView: View {
     }
 
     static let maxVisibleRows = 6
+
+    private func limits(_ limits: [AgentLimits], now: Date) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("PLAN LIMITS")
+                .font(.ui(11, .semibold))
+                .tracking(0.22)
+                .foregroundStyle(Palette.textTertiary)
+            PlanLimits(limits: limits, now: now)
+        }
+        .padding(EdgeInsets(top: 10, leading: 16, bottom: 0, trailing: 16))
+    }
 
     private func stats(_ today: DailyStats) -> some View {
         HStack(spacing: 8) {

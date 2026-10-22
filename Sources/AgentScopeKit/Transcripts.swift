@@ -15,6 +15,8 @@ public struct UsageSample: Hashable, Sendable {
     public var contextWindow: Int?
     /// Tool calls the model made in this line (for history; live counts come from hooks).
     public var toolCalls = 0
+    /// Plan limits the agent reported in this line.
+    public var limits: AgentLimits?
 
     public init() {}
 
@@ -85,6 +87,13 @@ public struct TranscriptReader: Sendable {
     }
 
     private mutating func parseClaude(_ json: JSONValue) -> UsageSample? {
+        let ts = json["timestamp"]?.stringValue.flatMap(Self.parseDate)
+        if let limits = AgentLimits.claudeQuota(json, at: ts ?? Date()) {
+            var sample = UsageSample()
+            sample.ts = ts
+            sample.limits = limits
+            return sample
+        }
         switch json["type"]?.stringValue {
         case "assistant":
             let message = json["message"]
@@ -143,7 +152,15 @@ public struct TranscriptReader: Sendable {
             contextWindow = payload?["model_context_window"]?.intValue ?? contextWindow
             return nil
         case ("event_msg", "token_count"):
-            guard let info = payload?["info"], let total = info["total_token_usage"] else { return nil }
+            let ts = json["timestamp"]?.stringValue.flatMap(Self.parseDate)
+            let limits = payload?["rate_limits"].flatMap { AgentLimits.codex($0, at: ts ?? Date()) }
+            guard let info = payload?["info"], let total = info["total_token_usage"] else {
+                guard let limits else { return nil }
+                var sample = UsageSample()
+                sample.ts = ts
+                sample.limits = limits
+                return sample
+            }
             let totals = (
                 input: total["input_tokens"]?.intValue ?? 0,
                 cached: total["cached_input_tokens"]?.intValue ?? 0,
@@ -152,7 +169,13 @@ public struct TranscriptReader: Sendable {
             )
             let previous = lastTotals ?? (0, 0, 0, 0)
             // Rate-limit updates repeat the last totals.
-            guard totals.input + totals.output > previous.input + previous.output else { return nil }
+            guard totals.input + totals.output > previous.input + previous.output else {
+                guard let limits else { return nil }
+                var sample = UsageSample()
+                sample.ts = ts
+                sample.limits = limits
+                return sample
+            }
             lastTotals = totals
             var sample = UsageSample()
             sample.ts = json["timestamp"]?.stringValue.flatMap(Self.parseDate)
@@ -163,6 +186,7 @@ public struct TranscriptReader: Sendable {
             sample.output = totals.output - previous.output
             sample.contextTokens = info["last_token_usage"]?["input_tokens"]?.intValue
             sample.contextWindow = info["model_context_window"]?.intValue ?? contextWindow
+            sample.limits = limits
             return sample
         default:
             return nil
@@ -190,6 +214,7 @@ public struct UsageAccumulator: Sendable {
         public var contextUsed: Double?
         public var model: String?
         public var ts: Date?
+        public var limits: AgentLimits?
     }
 
     public mutating func delta(for sample: UsageSample, prices: PriceTable) -> Delta {
@@ -200,7 +225,8 @@ public struct UsageAccumulator: Sendable {
             let window = sample.model.flatMap { prices.price(for: $0)?.contextWindow } ?? sample.contextWindow ?? 200_000
             context = min(1, Double(tokens) / Double(window))
         }
-        return Delta(tokens: sample.tokens, costUSD: sample.tokens > 0 ? cost : nil, contextUsed: context, model: sample.model, ts: sample.ts)
+        return Delta(tokens: sample.tokens, costUSD: sample.tokens > 0 ? cost : nil, contextUsed: context, model: sample.model, ts: sample.ts,
+                     limits: sample.limits)
     }
 }
 
@@ -287,7 +313,7 @@ public final class TranscriptMonitor: @unchecked Sendable {
         var updates: [Update] = []
         for path in readers.keys {
             guard var entry = readers[path] else { continue }
-            for sample in entry.reader.readNew() where sample.tokens > 0 || sample.contextTokens != nil {
+            for sample in entry.reader.readNew() where sample.tokens > 0 || sample.contextTokens != nil || sample.limits != nil {
                 updates.append(Update(sessionId: entry.sessionId, agent: entry.agent, delta: entry.usage.delta(for: sample, prices: prices)))
             }
             entry.reader.releaseBuffers()

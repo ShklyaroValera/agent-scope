@@ -134,6 +134,14 @@ final class AppModel {
                 return Data("decided \(held)\n".utf8)
             }
             #endif
+            // `agentscope statusline`: Claude Code's plan limits.
+            if line.starts(with: Data(#"{"type":"limits""#.utf8)) {
+                guard let json = try? JSONValue(parsing: line), let limits = AgentLimits(json: json) else { return nil }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated { self?.store.updateLimits(limits) }
+                }
+                return nil
+            }
             guard let envelope = try? HookEnvelope(line: line) else { return nil }
             let events = Normalizer.normalize(envelope)
             DispatchQueue.main.async {
@@ -274,6 +282,12 @@ final class AppModel {
                 if let warning = state.session.warning { notifier.stuck(state.session, warning: warning) }
             }
         }
+        if settings.notifyLimits, !useMockData {
+            let now = Date()
+            for limits in store.limits.values.compactMap({ $0.current(at: now) }) {
+                limits.windows.forEach { notifier.limit(limits.agent, window: $0, now: now) }
+            }
+        }
         if settings.dailyCostLimit > 0, store.today.costUSD >= settings.dailyCostLimit {
             notifier.dailyBudget(spent: store.today.costUSD, limit: settings.dailyCostLimit, day: store.dayStart)
         }
@@ -342,6 +356,7 @@ final class AppModel {
                 MainActor.assumeIsolated {
                     self?.usageReport = report
                     self?.isLoadingUsage = false
+                    report.limits.values.forEach { self?.store.updateLimits($0) }
                 }
             }
         }
@@ -403,6 +418,24 @@ final class AppModel {
             setupLog = "✗ \(agent.displayName): \(error)"
         }
         refreshHookStatuses()
+    }
+
+    // MARK: - Plan limits
+
+    /// Claude Code reports plan limits only to its status line; AgentScope joins it there (opt-in).
+    var claudeLimitsEnabled: Bool { ClaudeStatusLine().isEnabled() }
+
+    func setClaudeLimits(_ enabled: Bool) {
+        let statusLine = ClaudeStatusLine()
+        do {
+            let change = enabled ? try statusLine.planEnable(binary: hookBinary) : try statusLine.planDisable()
+            guard change.hasChanges else { return }
+            let backup = try ConfigFile.apply(change)
+            setupLog = (enabled ? "✓ Claude Code: AgentScope reads plan limits from the status line" : "✓ Claude Code: status line restored")
+                + (backup.map { " (backup: \($0.lastPathComponent))" } ?? "")
+        } catch {
+            setupLog = "✗ Claude Code status line: \(error)"
+        }
     }
 
     // MARK: - Settings helpers

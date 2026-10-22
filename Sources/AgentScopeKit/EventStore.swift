@@ -113,6 +113,8 @@ public final class EventStore {
     /// Newest first.
     public private(set) var feed: [FeedItem] = []
     public internal(set) var today: DailyStats
+    /// Latest plan limits each agent reported.
+    public private(set) var limits: [AgentKind: AgentLimits] = [:]
     public private(set) var dayStart: Date
 
     public var feedLimit = 500
@@ -174,9 +176,16 @@ public final class EventStore {
         }
         state.session.lastEventAt = max(state.session.lastEventAt, event.ts)
         if case .sessionStarted(source: "transcript") = event.kind {} else { state.transcriptOnly = false }
-        if let pid = event.pid, state.session.pid != pid {
+        // Agents run helper processes (Claude Desktop does) that send hooks for the same session and exit
+        // soon; keep watching the long-lived process and switch only once it is gone.
+        if let pid = event.pid, state.session.pid != pid,
+           state.session.pid.map({ !isSameProcess($0, startedAt: state.pidStart) }) ?? true {
             state.session.pid = pid
             state.pidStart = processStartTime(pid)
+        }
+        // Any event but the session's end proves it is alive (e.g. after its process was thought gone).
+        if state.ended {
+            if case .sessionEnded = event.kind {} else { state.ended = false }
         }
         if let model = event.model { state.session.model = model; state.nodes[0].model = model }
         if let tty = event.tty { state.tty = tty }
@@ -479,6 +488,7 @@ public final class EventStore {
             pending: states.filter { $0.isPendingVisible(at: now) }.compactMap(\.pending).sorted { $0.id < $1.id },
             today: today,
             callsPerMinute: callsPerMinute(now: now),
+            limits: AgentKind.allCases.compactMap { limits[$0]?.current(at: now) },
             recentFailure: lastFailureAt.map { now.timeIntervalSince($0) < 60 } ?? false
         )
     }
@@ -510,6 +520,11 @@ public final class EventStore {
 
     /// A transcript-only session counts as working this long after its last write.
     public static let transcriptActivityWindow: TimeInterval = 60
+
+    public func updateLimits(_ newer: AgentLimits) {
+        let merged = limits[newer.agent].map { newer.updatedAt >= $0.updatedAt ? $0.merged(with: newer) : $0 } ?? newer
+        if merged != limits[newer.agent] { limits[newer.agent] = merged }
+    }
 
     /// A session known only from its transcript.
     public func discovered(_ found: DiscoveredSession) {

@@ -30,6 +30,8 @@ public struct UsageReport: Sendable {
     public var days: [Date: [UsageKey: UsageTotals]] = [:]
     /// Agent → tokens in the last five hours (the window agent plans meter).
     public var lastFiveHours: [AgentKind: Int] = [:]
+    /// Latest plan limits each agent wrote to its transcripts.
+    public var limits: [AgentKind: AgentLimits] = [:]
     public var dayCount: Int
     public var generatedAt: Date
 
@@ -72,6 +74,7 @@ public final class UsageHistory: @unchecked Sendable {
         var days: [Date: [UsageKey: UsageTotals]]
         /// Token samples of the last day, for the moving five-hour window.
         var recent: [(Date, AgentKind, Int)]
+        var limits: AgentLimits?
     }
 
     public var prices: PriceTable
@@ -102,6 +105,9 @@ public final class UsageHistory: @unchecked Sendable {
             for (date, agent, tokens) in entry.recent where date >= fiveHoursAgo {
                 report.lastFiveHours[agent, default: 0] += tokens
             }
+            if let limits = entry.limits {
+                report.limits[agent] = report.limits[agent].map { limits.updatedAt >= $0.updatedAt ? $0.merged(with: limits) : limits.merged(with: $0) } ?? limits
+            }
         }
         return report
     }
@@ -110,12 +116,15 @@ public final class UsageHistory: @unchecked Sendable {
         let calendar = Calendar.current
         let project = TranscriptMonitor.header(of: file, agent: agent).map { URL(fileURLWithPath: $0.cwd).lastPathComponent } ?? "unknown"
         var reader = TranscriptReader(url: file, format: agent == .codex ? .codex : .claude)
-        var entry = FileEntry(size: size, modified: modified, days: [:], recent: [])
+        var entry = FileEntry(size: size, modified: modified, days: [:], recent: [], limits: nil)
         while true {
             let samples = reader.readNew(maxBytes: 16 * 1024 * 1024)
             if samples.isEmpty, reader.offset >= size { break }
             for sample in samples {
                 guard let ts = sample.ts else { continue }
+                if let limits = sample.limits {
+                    entry.limits = entry.limits.map { $0.merged(with: limits) } ?? limits
+                }
                 var totals = UsageTotals()
                 totals.tokens = sample.tokens
                 totals.toolCalls = sample.toolCalls

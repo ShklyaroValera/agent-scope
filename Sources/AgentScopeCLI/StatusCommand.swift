@@ -49,6 +49,9 @@ enum StatusTable {
         let today = snapshot.today
         output += "\nToday: \(Format.count(today.toolCalls)) tool calls · \(Format.tokens(today.tokens)) tokens · "
             + "\(Format.cost(today.costUSD)) est. · \(snapshot.callsPerMinute) calls/min\n"
+        for limits in snapshot.limits {
+            output += "\(limits.agent.displayName) plan: " + limits.windows.map { "\($0.name) \($0.summary(now: now))" }.joined(separator: " · ") + "\n"
+        }
         return output
     }
 

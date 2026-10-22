@@ -68,6 +68,7 @@ struct UsageTab: View {
         let today = report.dayStarts.last ?? Date()
         return SnapshotSafeScroll {
             VStack(alignment: .leading, spacing: 16) {
+                limitsCard
                 HStack(spacing: 12) {
                     card("Last 5 hours", Format.tokens(report.lastFiveHours.values.reduce(0, +)) + " tokens",
                          detail: AgentKind.allCases.compactMap { agent in
@@ -84,6 +85,36 @@ struct UsageTab: View {
             }
             .padding(20)
         }
+    }
+
+    /// Plan limits as the agents report them; Claude Code's need the status line opt-in.
+    private var limitsCard: some View {
+        let now = Date()
+        let limits = model.snapshot.limits
+        _ = model.setupLog // re-read after the opt-in button
+        let claudeMissing = !limits.contains { $0.agent == .claude } && !model.claudeLimitsEnabled
+        return VStack(alignment: .leading, spacing: 10) {
+            Text("PLAN LIMITS").font(.ui(11, .semibold)).tracking(0.22).foregroundStyle(Palette.textTertiary)
+            if limits.isEmpty {
+                Text("No limits reported yet. Codex reports them with each turn; Claude Code after its next response.")
+                    .font(.ui(12)).foregroundStyle(Palette.textTertiary)
+            } else {
+                PlanLimits(limits: limits, now: now, badgeSize: 20).frame(maxWidth: 420, alignment: .leading)
+            }
+            if claudeMissing {
+                HStack(spacing: 8) {
+                    Text("Claude Code shows its limits only in its status line.").font(.ui(12)).foregroundStyle(Palette.textSecondary)
+                    Button("Read them from there") { model.setClaudeLimits(true) }
+                        .buttonStyle(HoverButtonStyle(cornerRadius: 6))
+                        .foregroundStyle(Palette.call)
+                        .help("Adds AgentScope in front of your Claude Code status line; it looks the same. Undo in Settings.")
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(14)
+        .background(Palette.card, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Palette.hairline))
     }
 
     private func chart(_ report: UsageReport) -> some View {

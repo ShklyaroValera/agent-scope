@@ -76,6 +76,16 @@ struct Uninstall: ParsableCommand {
                 print("✗ \(name): \(error)")
             }
         }
+        guard agent == nil || agent == .claude else { return }
+        // The plan-limits status line, if it was turned on in the app: put the user's own back.
+        let statusLine = ClaudeStatusLine(home: home.map { URL(fileURLWithPath: $0) } ?? URL(fileURLWithPath: NSHomeDirectory()))
+        guard let change = try? statusLine.planDisable(), change.hasChanges else { return }
+        if dryRun {
+            print("• Claude Code: would restore your status line in \(tilde(change.file))")
+            print(unifiedDiff(change))
+        } else if let backup = try? ConfigFile.apply(change) {
+            print("✓ Claude Code: status line restored in \(tilde(change.file)) (backup: \(tilde(backup)))")
+        }
     }
 }
 

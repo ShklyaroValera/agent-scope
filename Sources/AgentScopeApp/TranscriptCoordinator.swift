@@ -59,6 +59,8 @@ final class TranscriptCoordinator {
                     for start in starts { self.store.adjustStart(sessionId: start.sessionId, to: start.date) }
                     for update in updates {
                         let delta = update.delta
+                        if let limits = delta.limits { self.store.updateLimits(limits) }
+                        guard delta.tokens > 0 || delta.contextUsed != nil else { continue }
                         self.store.addUsage(
                             sessionId: update.sessionId, agent: update.agent, tokens: delta.tokens, costUSD: delta.costUSD,
                             contextUsed: delta.contextUsed, model: delta.model, at: delta.ts ?? Date()

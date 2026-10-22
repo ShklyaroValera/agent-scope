@@ -12,6 +12,9 @@ enum Entry {
             HookCommand.run(arguments: Array(arguments.dropFirst()))
             exit(0)
         }
+        if arguments.first == "statusline" {
+            exit(StatusLineCommand.run(arguments: Array(arguments.dropFirst())))
+        }
         AgentScopeCommand.main()
     }
 }

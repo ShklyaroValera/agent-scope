@@ -27,13 +27,15 @@ struct GraphView: View {
         GeometryReader { proxy in
             let focus = focused ? model.selectedSessionId.flatMap { graph.bounds(ofSession: $0) } : nil
             let target = focus ?? CGRect(origin: .zero, size: fittedSize == .zero ? graph.size : fittedSize)
+            // Never enlarged past 100% (one session drawn huge looked wrong); only shrunk to fit.
             let fit = target.width > 0
-                ? max(Self.minimumFit, min(1.4, (proxy.size.width - 40) / target.width, (proxy.size.height - 40) / target.height))
+                ? max(Self.minimumFit, min(1, (proxy.size.width - 40) / target.width, (proxy.size.height - 40) / target.height))
                 : 1
             let scale = fit * zoom * pinch
-            // Center the focused session: content is scaled around the graph's center.
+            // Pinned to the top: new tool chips grow the graph downwards instead of shifting it. A focused
+            // session is centered instead.
             let focusOffset = focus.map {
-                CGSize(width: (graph.size.width / 2 - $0.midX) * scale, height: (graph.size.height / 2 - $0.midY) * scale)
+                CGSize(width: (graph.size.width / 2 - $0.midX) * scale, height: proxy.size.height / 2 - $0.midY * scale)
             } ?? .zero
             ZStack(alignment: .topLeading) {
                 EdgeLayer(edges: graph.edges, animate: !reduceMotion)
@@ -44,10 +46,10 @@ struct GraphView: View {
                 }
             }
             .frame(width: graph.size.width, height: graph.size.height)
-            .scaleEffect(scale)
+            .scaleEffect(scale, anchor: .top)
             .offset(x: pan.width + drag.width + focusOffset.width, y: pan.height + drag.height + focusOffset.height)
             .animation(.easeInOut(duration: 0.25), value: focused)
-            .frame(width: proxy.size.width, height: proxy.size.height)
+            .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 4)

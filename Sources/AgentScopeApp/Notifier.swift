@@ -73,6 +73,19 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         post(id: "stuck-\(key)", sessionId: session.id, title: title, body: "\(warning) · \(session.place)", sound: true)
     }
 
+    /// Once per window and step (80%, 95%, reached) as a plan limit runs out.
+    func limit(_ agent: AgentKind, window: LimitWindow, now: Date) {
+        guard window.isNear else { return }
+        let step = window.isReached ? 100 : window.usedPercent >= 95 ? 95 : 80
+        let id = "limit-\(agent.rawValue)-\(window.minutes)-\(Int(window.resetsAt?.timeIntervalSince1970 ?? 0))-\(step)"
+        guard !stuckNotified.contains(id) else { return }
+        stuckNotified.insert(id)
+        let title = window.isReached ? "\(agent.displayName) hit its \(window.name) limit"
+            : "\(agent.displayName) has used \(Int(window.usedPercent.rounded()))% of its \(window.name) limit"
+        let body = window.resetsAt.map { "Resets in \(Format.elapsed($0.timeIntervalSince(now)))" } ?? "Plan usage limit"
+        post(id: id, sessionId: "", title: title, body: body, sound: true)
+    }
+
     /// Once per day when today's estimated cost passes the daily limit.
     func dailyBudget(spent: Double, limit: Double, day: Date) {
         let id = "daily-budget-\(Int(day.timeIntervalSince1970))"

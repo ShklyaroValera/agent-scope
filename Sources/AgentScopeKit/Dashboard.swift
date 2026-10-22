@@ -101,12 +101,18 @@ public struct DashboardSnapshot: Sendable {
     public var callsPerMinute: Int
     /// A tool call failed in the last minute.
     public var recentFailure: Bool
+    /// Plan limits per agent, current windows only.
+    public var limits: [AgentLimits]
 
-    public init(sessions: [SessionSummary], pending: [PendingDecision], today: DailyStats, callsPerMinute: Int, recentFailure: Bool = false) {
+    public init(
+        sessions: [SessionSummary], pending: [PendingDecision], today: DailyStats, callsPerMinute: Int,
+        limits: [AgentLimits] = [], recentFailure: Bool = false
+    ) {
         self.sessions = sessions
         self.pending = pending
         self.today = today
         self.callsPerMinute = callsPerMinute
+        self.limits = limits
         self.recentFailure = recentFailure
     }
 

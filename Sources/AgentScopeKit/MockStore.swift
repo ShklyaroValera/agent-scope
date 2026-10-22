@@ -50,6 +50,17 @@ extension EventStore {
         store.addUsage(sessionId: "mock-cc", tokens: 0, costUSD: nil, contextUsed: 0.62, model: nil, at: now)
         store.addUsage(sessionId: "mock-cx", tokens: 0, costUSD: nil, contextUsed: 0.35, model: nil, at: now)
         store.today = DailyStats(toolCalls: 1284, tokens: 3_100_000, costUSD: 4.62)
+        store.updateLimits(AgentLimits(
+            agent: .claude,
+            fiveHour: LimitWindow(usedPercent: 84, resetsAt: now.addingTimeInterval(4800), minutes: 300),
+            weekly: LimitWindow(usedPercent: 37, resetsAt: now.addingTimeInterval(3 * 86_400), minutes: 10_080),
+            plan: "max", updatedAt: now
+        ))
+        store.updateLimits(AgentLimits(
+            agent: .codex, fiveHour: LimitWindow(usedPercent: 9, resetsAt: now.addingTimeInterval(900), minutes: 300),
+            weekly: LimitWindow(usedPercent: 1, resetsAt: now.addingTimeInterval(6 * 86_400), minutes: 10_080),
+            plan: "plus", updatedAt: now
+        ))
         return store
     }
 }

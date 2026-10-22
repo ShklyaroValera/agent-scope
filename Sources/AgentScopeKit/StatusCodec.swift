@@ -51,6 +51,7 @@ extension DashboardSnapshot {
             .init(key: "today", value: today.json),
             .init(key: "callsPerMinute", value: .int(callsPerMinute)),
             .init(key: "recentFailure", value: .bool(recentFailure)),
+            .init(key: "limits", value: .array(limits.map(\.json))),
         ]))
     }
 
@@ -85,6 +86,7 @@ extension DashboardSnapshot {
             pending: pending,
             today: json["today"].map(DailyStats.init(json:)) ?? .zero,
             callsPerMinute: json["callsPerMinute"]?.intValue ?? 0,
+            limits: (json["limits"]?.arrayValue ?? []).compactMap(AgentLimits.init(json:)),
             recentFailure: json["recentFailure"]?.boolValue ?? false
         )
     }

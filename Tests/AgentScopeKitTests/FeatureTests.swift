@@ -289,3 +289,34 @@ struct UsageHistoryTests {
         #expect(history.report(days: 7, now: now).total.tokens == 35_912)
     }
 }
+
+@MainActor
+struct HelperProcessTests {
+    @Test func shortLivedHelperDoesNotEndTheSession() {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        var alive: Set<Int32> = [100, 200]
+        let store = EventStore(now: now)
+        store.processIsAlive = { alive.contains($0) }
+        store.processStartTime = { _ in nil }
+        store.gitLookup = { _ in nil }
+        func event(_ seconds: TimeInterval, pid: Int32, _ kind: EventKind) -> AgentEvent {
+            AgentEvent(ts: now.addingTimeInterval(seconds), agent: .claude, sessionId: "s", cwd: "/p", pid: pid, kind: kind)
+        }
+        store.apply(event(0, pid: 100, .promptSubmitted))
+        store.apply(event(1, pid: 200, .toolStarted(ToolEvent(id: "t", tool: "Read", summary: "a"))))
+        alive.remove(200)
+        store.tick(now: now.addingTimeInterval(5))
+        #expect(store.sessions["s"]?.session.pid == 100)
+        #expect(store.sessions["s"]?.ended == false)
+
+        // The main process going away ends it; a later event brings the same session back.
+        alive.remove(100)
+        store.tick(now: now.addingTimeInterval(6))
+        #expect(store.sessions["s"]?.ended == true)
+        alive.insert(300)
+        store.apply(event(7, pid: 300, .toolStarted(ToolEvent(id: "u", tool: "Read", summary: "b"))))
+        #expect(store.sessions["s"]?.ended == false)
+        #expect(store.sessions["s"]?.session.pid == 300)
+        #expect(store.sessions["s"]?.session.startedAt == now)
+    }
+}

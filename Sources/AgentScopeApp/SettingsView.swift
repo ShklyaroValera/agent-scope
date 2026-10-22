@@ -46,6 +46,19 @@ struct SettingsView: View {
                 Toggle("When an agent needs you", isOn: $settings.notifyNeedsYou)
                 Toggle("When an agent finishes its turn", isOn: $settings.notifyFinished)
                 Toggle("When an agent looks stuck (loops, long calls, silence)", isOn: $settings.notifyStuck)
+                Toggle("When a plan limit is nearly used up (80%, 95%)", isOn: $settings.notifyLimits)
+            }
+
+            Section {
+                Toggle("Show Claude Code's plan limits", isOn: Binding(
+                    get: { _ = refresh; return model.claudeLimitsEnabled },
+                    set: { model.setClaudeLimits($0); refresh += 1 }
+                ))
+            } header: {
+                Text("Plan limits")
+            } footer: {
+                Text("Codex limits show automatically. Claude Code reports its 5-hour and weekly limits only to its status line, so this adds AgentScope in front of yours; your status line looks the same, and turning this off puts it back.")
+                    .font(.ui(11)).foregroundStyle(.secondary)
             }
 
             Section {

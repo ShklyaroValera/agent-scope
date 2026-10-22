@@ -68,7 +68,7 @@ enum HookCommand {
     /// Agents write the payload and close stdin at once; never wait on a pipe that stays open.
     static let stdinTimeout: TimeInterval = 0.5
 
-    private static func readStdin() -> Data {
+    static func readStdin() -> Data {
         guard isatty(STDIN_FILENO) == 0 else { return Data() }
         let deadline = Date().addingTimeInterval(stdinTimeout)
         var data = Data()
@@ -86,7 +86,7 @@ enum HookCommand {
         return data
     }
 
-    private static func saveRawPayload(_ raw: Data, agent: String, event: String?, at date: Date, pid: Int32, paths: AgentScopePaths) {
+    static func saveRawPayload(_ raw: Data, agent: String, event: String?, at date: Date, pid: Int32, paths: AgentScopePaths) {
         let directory = paths.rawPayloads.appending(path: agent)
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let millis = Int(date.timeIntervalSince1970 * 1000)

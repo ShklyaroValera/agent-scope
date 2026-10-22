@@ -42,6 +42,10 @@ final class AppSettings {
     var notifyStuck: Bool {
         didSet { defaults.set(notifyStuck, forKey: "notifyStuck") }
     }
+    /// When a plan's 5-hour or weekly limit is nearly used up.
+    var notifyLimits: Bool {
+        didSet { defaults.set(notifyLimits, forKey: "notifyLimits") }
+    }
     /// Guardrails; 0 turns a limit off.
     var sessionCostLimit: Double {
         didSet { defaults.set(sessionCostLimit, forKey: "sessionCostLimit") }
@@ -72,6 +76,7 @@ final class AppSettings {
         allowDenyCategories = Set(categories ?? PermissionCategory.allCases)
         allowDenyWait = defaults.object(forKey: "allowDenyWait") as? Int ?? 30
         notifyStuck = defaults.object(forKey: "notifyStuck") as? Bool ?? true
+        notifyLimits = defaults.object(forKey: "notifyLimits") as? Bool ?? true
         switcherShortcut = defaults.object(forKey: "switcherShortcut") as? Bool ?? true
         sessionCostLimit = defaults.double(forKey: "sessionCostLimit")
         dailyCostLimit = defaults.double(forKey: "dailyCostLimit")
