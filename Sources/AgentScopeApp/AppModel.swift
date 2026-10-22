@@ -68,6 +68,17 @@ final class AppModel {
                     MainActor.assumeIsolated { self?.statusResponse() }
                 }
             }
+            #if DEBUG
+            if let request = try? JSONValue(parsing: line), request["type"] == "debug-render", let dir = request["dir"]?.stringValue {
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self else { return }
+                        DebugSnapshot.renderLive(model: self, to: URL(fileURLWithPath: dir))
+                    }
+                }
+                return Data("ok\n".utf8)
+            }
+            #endif
             guard let envelope = try? HookEnvelope(line: line) else { return nil }
             let events = Normalizer.normalize(envelope)
             DispatchQueue.main.async {
@@ -124,6 +135,8 @@ final class AppModel {
         checkAttention()
         ticks += 1
         if ticks % 2 == 0 { pollTranscripts(scanToday: ticks == 2, discover: ticks % 20 == 2) }
+        // Events that missed the socket (app busy, restarting) land in the spool; pick them up soon.
+        if ticks % 5 == 0, FileManager.default.fileExists(atPath: paths.spool.path) { replaySpool() }
         if ticks % 30 == 0 { saveStats() }
         if ticks % 60 == 0 { refreshHookStatuses() }
     }
@@ -148,6 +161,7 @@ final class AppModel {
             store.apply(Normalizer.normalize(envelope).filter { settings.enabledAgents.contains($0.agent) })
         }
         store.tick()
+        checkAttention()
     }
 
     private func saveStats() {

@@ -28,9 +28,11 @@ public struct HookEnvelope: Sendable {
     public var agentProcess: ProcessEntry? { ProcessTree.agentProcess(in: ancestors) }
     public var tty: String? { ancestors.first { $0.tty != nil }?.tty }
 
-    /// Payloads above this size are cut down to their small top-level fields (a `Read` of a large file
-    /// carries the whole file in `tool_response`).
-    public static let maxPayloadBytes = 512 * 1024
+    /// Payloads above this size are shrunk before sending: a `Read` of a large file or an image carries
+    /// all of it in `tool_response`, which nothing downstream needs, and big lines miss the hook's time budget.
+    public static let maxPayloadBytes = 64 * 1024
+    /// Strings in a shrunk payload keep this many characters.
+    static let maxStringLength = 2000
 
     /// Builds the wire line around `rawPayload` without decoding it when it is valid JSON of sane size.
     public static func line(
@@ -61,7 +63,12 @@ public struct HookEnvelope: Sendable {
         guard let object = try? JSONSerialization.jsonObject(with: trimmed, options: [.fragmentsAllowed]) else {
             return Data(JSONValue.string(String(decoding: trimmed.prefix(64 * 1024), as: UTF8.self)).compactText.utf8)
         }
-        if trimmed.count > maxPayloadBytes, let dictionary = object as? [String: Any] {
+        if trimmed.count > maxPayloadBytes, var dictionary = object as? [String: Any] {
+            // Cut long strings and arrays; every field stays, so tool names, paths and commands survive.
+            dictionary = shrink(dictionary) as? [String: Any] ?? [:]
+            dictionary["_agentscope_truncated"] = true
+            if let data = try? JSONSerialization.data(withJSONObject: dictionary), data.count <= maxPayloadBytes { return data }
+            // Still too big (thousands of fields): keep the small top-level ones.
             var small: [String: Any] = ["_agentscope_truncated": true]
             for (key, value) in dictionary {
                 if let data = try? JSONSerialization.data(withJSONObject: value, options: [.fragmentsAllowed]), data.count <= 4096 {
@@ -72,6 +79,19 @@ public struct HookEnvelope: Sendable {
         }
         // Raw newlines can only be insignificant whitespace in valid JSON; strip them to keep one line.
         return Data(trimmed.map { $0 == 0x0A || $0 == 0x0D ? 0x20 : $0 })
+    }
+
+    static func shrink(_ value: Any) -> Any {
+        switch value {
+        case let text as String:
+            text.count > maxStringLength ? String(text.prefix(maxStringLength)) + "…" : text
+        case let array as [Any]:
+            array.prefix(50).map(shrink)
+        case let object as [String: Any]:
+            object.mapValues(shrink)
+        default:
+            value
+        }
     }
 
     public init(line: Data) throws {

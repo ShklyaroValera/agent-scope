@@ -41,6 +41,20 @@ enum DebugSnapshot {
         return [("menubar-icon", AnyView(icons)), ("main-window", AnyView(window))]
     }
 
+    /// `{"type":"debug-render","dir":"<dir>"}` on the socket: renders the live popover and main window
+    /// (whatever the app currently shows) to `<dir>`, for debugging without screen access.
+    static func renderLive(model: AppModel, to directory: URL) {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let window = HStack(spacing: 0) {
+            SidebarView().frame(width: 260)
+            Rectangle().fill(Palette.sidebarBorder).frame(width: 1)
+            MainContent()
+        }
+        .frame(width: 1280, height: 748)
+        render(PopoverView().environment(model), scheme: .light, to: directory.appending(path: "live-popover.png"))
+        render(window.environment(model), scheme: .light, to: directory.appending(path: "live-main-window.png"))
+    }
+
     private static func render(_ view: some View, scheme: ColorScheme, to url: URL) {
         let appearance = NSAppearance(named: scheme == .light ? .aqua : .darkAqua)
         appearance?.performAsCurrentDrawingAppearance {

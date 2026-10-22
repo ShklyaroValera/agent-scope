@@ -6,6 +6,8 @@ import Foundation
 /// Hard rules (CLAUDE.md): always exit 0, print nothing, finish in < 100 ms.
 enum HookCommand {
     static let connectTimeout: TimeInterval = 0.05
+    /// Connect plus write; the whole hook must stay under 100 ms.
+    static let sendTimeout: TimeInterval = 0.08
     static let maxStdinBytes = 16 * 1024 * 1024
 
     static func run(arguments: [String]) {
@@ -40,7 +42,7 @@ enum HookCommand {
             ancestors: ProcessTree.ancestors(of: getppid()),
             rawPayload: raw
         )
-        if !SocketClient.send(line, to: paths.socket.path, timeout: connectTimeout) {
+        if !SocketClient.send(line, to: paths.socket.path, timeout: connectTimeout, writeTimeout: sendTimeout) {
             try? FileManager.default.createDirectory(at: paths.root, withIntermediateDirectories: true)
             Spool.append(line, to: paths.spool)
         }

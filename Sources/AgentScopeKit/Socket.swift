@@ -34,13 +34,14 @@ private func wait(_ fd: Int32, for events: Int16, until deadline: Date) -> Bool 
 }
 
 public enum SocketClient {
-    /// Connects, writes `data`, closes. Returns false — without blocking past `timeout` — when nobody listens.
+    /// Connects, writes `data`, closes. Returns false — without blocking past `timeout` (connect) or
+    /// `writeTimeout` (everything) — when nobody listens or the write cannot finish.
     @discardableResult
-    public static func send(_ data: Data, to path: String, timeout: TimeInterval) -> Bool {
-        let deadline = Date().addingTimeInterval(timeout)
-        guard let fd = connect(path, deadline: deadline) else { return false }
+    public static func send(_ data: Data, to path: String, timeout: TimeInterval, writeTimeout: TimeInterval? = nil) -> Bool {
+        let start = Date()
+        guard let fd = connect(path, deadline: start.addingTimeInterval(timeout)) else { return false }
         defer { close(fd) }
-        return write(data, to: fd, deadline: deadline)
+        return write(data, to: fd, deadline: start.addingTimeInterval(max(timeout, writeTimeout ?? timeout)))
     }
 
     /// Sends one request line and returns everything the server writes back before closing.

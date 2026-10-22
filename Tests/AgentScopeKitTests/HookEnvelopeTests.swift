@@ -44,11 +44,15 @@ struct HookEnvelopeTests {
         #expect(try HookEnvelope(line: line("").dropLast()).payload == .null)
     }
 
-    @Test func hugePayloadKeepsSmallFields() throws {
-        let big = String(repeating: "x", count: HookEnvelope.maxPayloadBytes)
-        let envelope = try HookEnvelope(line: line(#"{"session_id":"s1","tool_response":{"content":"\#(big)"}}"#).dropLast())
+    @Test func hugePayloadIsShrunkKeepingEveryField() throws {
+        let image = String(repeating: "x", count: 400 * 1024)
+        let raw = #"{"session_id":"s1","tool_name":"Read","tool_input":{"file_path":"/tmp/a.png"},"tool_response":[{"type":"image","source":{"data":"\#(image)"}}]}"#
+        let data = line(raw)
+        #expect(data.count < HookEnvelope.maxPayloadBytes)
+        let envelope = try HookEnvelope(line: data.dropLast())
         #expect(envelope.payload["session_id"] == "s1")
-        #expect(envelope.payload["tool_response"] == nil)
+        #expect(envelope.payload["tool_input"]?["file_path"] == "/tmp/a.png")
+        #expect(envelope.payload["tool_response"]?.arrayValue?.first?["source"]?["data"]?.stringValue?.count == HookEnvelope.maxStringLength + 1)
         #expect(envelope.payload["_agentscope_truncated"] == true)
     }
 }
