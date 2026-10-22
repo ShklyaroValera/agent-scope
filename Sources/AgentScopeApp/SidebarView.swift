@@ -47,6 +47,7 @@ private struct SidebarRow: View {
     let now: Date
     let selected: Bool
     let action: () -> Void
+    @State private var hovering = false
 
     var body: some View {
         let session = state.session
@@ -64,7 +65,9 @@ private struct SidebarRow: View {
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                if session.status == .needsYou {
+                if hovering {
+                    JumpButton(sessionId: session.id)
+                } else if session.status == .needsYou {
                     PulseDot(color: Palette.needsYou)
                 } else {
                     Circle().fill(dotColor).frame(width: 8, height: 8)
@@ -76,6 +79,8 @@ private struct SidebarRow: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .contextMenu { SessionMenu(sessionId: session.id) }
         .accessibilityLabel("\(session.agent.displayName), \(session.project), \(session.status.rawValue)")
     }
 

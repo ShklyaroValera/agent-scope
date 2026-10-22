@@ -10,7 +10,8 @@ A macOS menu bar app and CLI that shows every AI coding agent running on your Ma
 
 - **One glance:** the menu bar icon shows how many agents are working, with an orange dot when one waits for your permission, red when a tool call just failed, green when an agent finished and it's your turn.
 - **Inbox order:** what needs you first, then agents waiting for your next prompt (longest first, "Your turn · waiting 7m"), failures, work in progress.
-- **Needs you:** a notification and a banner the moment an agent asks for permission. **Jump to** brings its terminal or IDE to the front (selects the Terminal / iTerm2 tab, follows tmux panes).
+- **Needs you:** a notification and a banner the moment an agent asks for permission.
+- **Go to the agent:** click a session in the popover (or ↗ on a sidebar row or graph node) to land in its window — the Terminal / iTerm2 tab, the tmux pane, or the IDE window of its project. Right-click for more: open the project in VS Code / Cursor / Zed, a new terminal there, Finder, the graph or its turns.
 - **Allow / Deny** (Claude Code, opt-in in Settings): answer the permission prompt from the popover, the graph or the notification; after a short wait Claude asks in the terminal as usual.
 - **Quick switcher:** ⌃⌥Space from any app, type to filter, ↩ jumps to that agent's window.
 - **Looks stuck:** the same call failing in a row, a call running for 10+ minutes, or silence while working gets flagged (and notified).

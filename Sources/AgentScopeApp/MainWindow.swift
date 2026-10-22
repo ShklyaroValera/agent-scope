@@ -44,6 +44,22 @@ struct MainContent: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
+        tabContent
+            .overlay(alignment: .top) {
+                if let message = model.jumpMessage {
+                    Text(message)
+                        .font(.ui(12))
+                        .foregroundStyle(Palette.needsYouText)
+                        .padding(.horizontal, 14).padding(.vertical, 8)
+                        .background(Palette.bannerBackground, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Palette.bannerBorder))
+                        .padding(.top, 64)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private var tabContent: some View {
         switch model.tab {
         case .graph:
             GraphPanel()

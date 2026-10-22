@@ -71,13 +71,7 @@ struct PopoverView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
             ForEach(snapshot.activeSessions + snapshot.idleSessions) { summary in
-                Button {
-                    model.selectedSessionId = summary.id
-                    openGraph()
-                } label: {
-                    SessionRow(summary: summary, now: now)
-                }
-                .buttonStyle(HoverButtonStyle())
+                PopoverSessionButton(summary: summary, now: now)
             }
         }
         .padding(.horizontal, 8)
@@ -296,5 +290,40 @@ private struct CodexTrustBanner: View {
         .background(Palette.bannerBackground, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.bannerBorder))
         .padding(EdgeInsets(top: 0, leading: 12, bottom: 10, trailing: 12))
+    }
+}
+
+/// A session in the popover: click goes to the agent's window; the graph icon (on hover) shows it in
+/// the Agent Graph; right click has the rest.
+private struct PopoverSessionButton: View {
+    let summary: SessionSummary
+    let now: Date
+    @Environment(AppModel.self) private var model
+    @State private var hovering = false
+
+    var body: some View {
+        let destination = JumpService.destination(of: model.activeStore.sessions[summary.id])
+        Button { model.jump(toSession: summary.id) } label: {
+            SessionRow(summary: summary, now: now)
+        }
+        .buttonStyle(HoverButtonStyle())
+        .overlay(alignment: .topTrailing) {
+            if hovering {
+                Button { model.showInGraph(summary.id) } label: {
+                    GraphGlyph()
+                        .stroke(Palette.call, style: StrokeStyle(lineWidth: 1.4, lineCap: .round, lineJoin: .round))
+                        .frame(width: 12, height: 12)
+                        .frame(width: 22, height: 22)
+                        .background(Palette.card, in: RoundedRectangle(cornerRadius: 5))
+                        .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(Palette.hairline))
+                }
+                .buttonStyle(.plain)
+                .help("Show in Agent Graph")
+                .padding(4)
+            }
+        }
+        .onHover { hovering = $0 }
+        .help(destination.map { "Go to \($0)" } ?? "No window found for this agent")
+        .contextMenu { SessionMenu(sessionId: summary.id) }
     }
 }

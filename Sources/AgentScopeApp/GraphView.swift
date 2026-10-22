@@ -138,6 +138,8 @@ struct GraphView: View {
                     pan = .zero
                     focused = true
                 })
+                .modifier(HoverJump(sessionId: sessionId))
+                .contextMenu { SessionMenu(sessionId: sessionId) }
             }
         case .subagent(let sessionId, let nodeId):
             if let state = states[sessionId], let agent = state.nodes.first(where: { $0.id == nodeId }) {
@@ -220,5 +222,19 @@ extension GraphEdge {
             remaining -= length
         }
         return points.last ?? .zero
+    }
+}
+
+/// Shows the ↗ jump button in a session node's corner while the pointer is over it.
+private struct HoverJump: ViewModifier {
+    let sessionId: String
+    @State private var hovering = false
+
+    func body(content: Content) -> some View {
+        content
+            .overlay(alignment: .topTrailing) {
+                if hovering { JumpButton(sessionId: sessionId, size: 22).offset(x: 8, y: -8) }
+            }
+            .onHover { hovering = $0 }
     }
 }
