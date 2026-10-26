@@ -26,8 +26,11 @@ A macOS menu bar app and CLI that shows every AI coding agent running on your Ma
 ## Install
 
 ```bash
-brew install --cask shklyarovalera/tap/agentscope
+brew tap shklyarovalera/agent-scope https://github.com/ShklyaroValera/agent-scope
+brew install --cask shklyarovalera/agent-scope/agentscope
 ```
+
+The repository is its own tap (`Casks/agentscope.rb`), so `brew upgrade` picks up new releases.
 
 Or download `AgentScope-<version>.zip` from [Releases](https://github.com/ShklyaroValera/agent-scope/releases), move `AgentScope.app` to `/Applications` and link the CLI:
 
