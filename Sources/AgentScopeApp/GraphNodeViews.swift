@@ -255,34 +255,140 @@ private struct CardFooter: View {
     }
 }
 
+/// A tool call in the graph: what kind of action, its input laid out for reading (file name over its
+/// folder, the command in a code well), status with duration, and which agent made it.
 struct ToolChipView: View {
     let call: ToolCall
+    /// "main", "Explore"…
+    let agent: String?
+    let now: Date
+
+    private static let time: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm:ss"
+        return formatter
+    }()
 
     var body: some View {
-        let name = ToolSummary.displayName(call.tool)
+        let card = ToolCard(tool: call.tool, summary: call.summary)
         let failed = call.status == .failed
-        HStack(spacing: 6) {
-            Image(systemName: failed ? "xmark.circle" : Self.symbol(for: call.tool))
-                .font(.system(size: 10, weight: .semibold))
-            Text(failed ? "\(name) failed" : call.summary.isEmpty ? name : "\(name) · \(call.summary)")
-                .font(.mono(11))
-                .lineLimit(1)
-                .truncationMode(.tail)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Image(systemName: Self.symbol(for: call.tool))
+                    .font(.system(size: 9.5, weight: .semibold))
+                    .foregroundStyle(accent)
+                    .frame(width: 18, height: 18)
+                    .background(accentTint, in: RoundedRectangle(cornerRadius: 5))
+                Text(card.name).font(.ui(12, .semibold)).foregroundStyle(Palette.textPrimary)
+                Text(card.tag)
+                    .font(.ui(10.5)).foregroundStyle(Palette.textSecondary)
+                    .padding(.horizontal, 5).padding(.vertical, 1)
+                    .background(Palette.hover, in: RoundedRectangle(cornerRadius: 4))
+                    .fixedSize()
+                Spacer(minLength: 4)
+                statusLabel
+            }
+            if card.kind == .shell {
+                well(Text("$ ").foregroundStyle(Palette.textTertiary) + Text(card.primary.isEmpty ? "…" : card.primary))
+                    .padding(.top, 6)
+            } else {
+                Text(card.primary.isEmpty ? "—" : card.primary)
+                    .font(card.kind == .search || card.kind == .webSearch ? .mono(11.5) : .ui(12.5, .semibold))
+                    .foregroundStyle(Palette.textPrimary)
+                    .padding(.top, 6)
+                if !card.secondary.isEmpty, !failed {
+                    Text(card.secondary)
+                        .font(.mono(10.5)).foregroundStyle(Palette.textTertiary)
+                        .truncationMode(.head)
+                        .padding(.top, 1)
+                }
+            }
+            if failed {
+                Text(call.error.map(firstLine) ?? "Failed")
+                    .font(.mono(10.5)).foregroundStyle(Palette.toolFailedText)
+                    .padding(.top, 2)
+            }
             Spacer(minLength: 0)
+            HStack {
+                Text(agent ?? "main")
+                Spacer(minLength: 4)
+                Text(Self.time.string(from: call.startedAt)).monospacedDigit()
+            }
+            .font(.ui(10.5)).foregroundStyle(Palette.textTertiary)
         }
-        .foregroundStyle(failed ? Palette.toolFailedText : Palette.textPrimary)
+        .lineLimit(1)
+        .truncationMode(.tail)
         .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(background, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(border))
-        .accessibilityLabel("\(name) \(call.summary), \(call.status.rawValue)")
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(background, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(border))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(ToolSummary.displayName(call.tool)) \(call.summary), \(call.status.rawValue)")
+    }
+
+    @ViewBuilder
+    private var statusLabel: some View {
+        HStack(spacing: 3) {
+            switch call.status {
+            case .working, .needsYou:
+                Image(systemName: "circle.dotted")
+                Text(Format.callDuration(now.timeIntervalSince(call.startedAt)))
+            case .failed:
+                Image(systemName: "xmark")
+                Text("failed")
+            default:
+                Image(systemName: "checkmark")
+                Text(call.finishedAt.map { Format.callDuration($0.timeIntervalSince(call.startedAt)) } ?? "done")
+            }
+        }
+        .font(.ui(10.5, .medium)).monospacedDigit()
+        .foregroundStyle(statusColor)
+        .fixedSize()
+    }
+
+    private func well(_ text: Text) -> some View {
+        text
+            .font(.mono(11))
+            .foregroundStyle(Palette.textBody)
+            .padding(.horizontal, 7).padding(.vertical, 3)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(call.status == .failed ? Palette.card.opacity(0.5) : Palette.codeBackground, in: RoundedRectangle(cornerRadius: 5))
+    }
+
+    private func firstLine(_ text: String) -> String {
+        text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text
+    }
+
+    private var statusColor: Color {
+        switch call.status {
+        case .working, .needsYou: Palette.call
+        case .failed: Palette.toolFailedText
+        default: Palette.answeredText
+        }
+    }
+
+    private var accent: Color {
+        switch call.status {
+        case .working, .needsYou: Palette.call
+        case .failed: Palette.toolFailedText
+        default: Palette.textSecondary
+        }
+    }
+
+    private var accentTint: Color {
+        switch call.status {
+        case .working, .needsYou: Palette.call.opacity(0.18)
+        case .failed: Palette.failed.opacity(0.2)
+        default: Palette.hover
+        }
     }
 
     private var background: Color {
         switch call.status {
         case .working, .needsYou: Palette.toolWorkingBackground
         case .failed: Palette.toolFailedBackground
-        default: Palette.toolIdleBackground
+        default: Palette.card
         }
     }
 
@@ -290,7 +396,7 @@ struct ToolChipView: View {
         switch call.status {
         case .working, .needsYou: Palette.toolWorkingBorder
         case .failed: Palette.toolFailedBorder
-        default: Palette.hairline
+        default: Palette.nodeBorder
         }
     }
 

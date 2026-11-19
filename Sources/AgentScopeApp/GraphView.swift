@@ -153,7 +153,7 @@ struct GraphView: View {
         case .tool(let sessionId, let callId):
             if let state = states[sessionId], let call = state.calls.first(where: { $0.id == callId }) {
                 inspectable(node, state: state) {
-                    ToolChipView(call: call)
+                    ToolChipView(call: call, agent: state.nodes.first { $0.id == call.agentNodeId }?.name, now: now)
                 }
             }
         case .permission(let sessionId):

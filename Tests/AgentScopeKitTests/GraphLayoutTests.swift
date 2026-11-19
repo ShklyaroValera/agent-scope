@@ -105,3 +105,35 @@ struct ModelNameTests {
         #expect(Format.elapsedPrecise(3900) == "1h 5m")
     }
 }
+
+struct ToolCardTests {
+    @Test func filesSplitIntoNameAndFolder() {
+        let card = ToolCard(tool: "Edit", summary: "Sources/AgentScopeApp/GraphView.swift")
+        #expect(card == ToolCard(kind: .file, name: "Edit", tag: "File", primary: "GraphView.swift", secondary: "Sources/AgentScopeApp/"))
+        #expect(ToolCard(tool: "Read", summary: "README.md").secondary == "")
+    }
+
+    @Test func patchesCountFiles() {
+        let card = ToolCard(tool: "apply_patch", summary: "src/strategy/signals.ts +1")
+        #expect(card.tag == "2 files")
+        #expect(card.primary == "signals.ts +1")
+        #expect(card.secondary == "src/strategy/")
+    }
+
+    @Test func webAndSearchAndMCP() {
+        let fetch = ToolCard(tool: "WebFetch", summary: "https://developer.apple.com/documentation/swiftui?lang=en")
+        #expect(fetch.primary == "developer.apple.com")
+        #expect(fetch.secondary == "/documentation/swiftui?lang=en")
+        #expect(ToolCard(tool: "Grep", summary: "struct ToolCall").primary == "“struct ToolCall”")
+        let mcp = ToolCard(tool: "mcp__github__create_issue", summary: "Flaky test")
+        #expect(mcp.kind == .mcp && mcp.name == "create_issue" && mcp.tag == "github")
+        let agent = ToolCard(tool: "Task", summary: "Explore · find the loader")
+        #expect(agent.tag == "Explore" && agent.primary == "find the loader")
+    }
+
+    @Test func durations() {
+        #expect(Format.callDuration(0.34) == "0.3s")
+        #expect(Format.callDuration(12.6) == "12s")
+        #expect(Format.callDuration(252) == "4m 12s")
+    }
+}

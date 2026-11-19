@@ -59,7 +59,7 @@ public enum GraphBuilder {
         public var root = CGSize(width: 170, height: 56)
         public var session = CGSize(width: 236, height: 120)
         public var subagent = CGSize(width: 156, height: 80)
-        public var tool = CGSize(width: 184, height: 38)
+        public var tool = CGSize(width: 220, height: 88)
         public var permission = CGSize(width: 210, height: 118)
         public var horizontalGap: CGFloat = 40
         public var verticalGap: CGFloat = 76
