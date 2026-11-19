@@ -145,7 +145,8 @@ public enum GraphBuilder {
 
         // The permission card already shows the main agent's blocked call.
         if !mainNeedsYou {
-            let mainCalls = calls(of: state.mainNodeId, in: state, limit: shown.isEmpty ? 2 : 1)
+            // Only the latest call; with subagents shown, only while it is still running.
+            let mainCalls = calls(of: state.mainNodeId, in: state, limit: 1)
             let mainChain = shown.isEmpty ? mainCalls : mainCalls.filter { $0.finishedAt == nil }
             item.children += chain(mainChain, sessionId: id, now: now, metrics: metrics)
         }

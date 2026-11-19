@@ -37,11 +37,11 @@ struct GraphLayoutTests {
         #expect(try node(graph, "tool:cc-1").frame.minY > explore.frame.maxY)
         #expect(try node(graph, "tool:cc-2").status == .working)
 
-        // Codex: newest call on top of the chain, and the session reads as working.
+        // Codex: only its latest call, and the session reads as working.
         let codex = try node(graph, "session:mock-cx")
         #expect(codex.status == .working)
-        #expect(try node(graph, "tool:cx-2").frame.minY < node(graph, "tool:cx-1").frame.minY)
-        #expect(try node(graph, "tool:cx-1").status == .failed)
+        #expect(try node(graph, "tool:cx-2").status == .working)
+        #expect(!graph.nodes.contains { $0.id == "tool:cx-1" })
 
         // Copilot: the permission card replaces the blocked call.
         #expect(graph.nodes.contains { $0.kind == .permission(sessionId: "mock-cp") })
@@ -73,9 +73,9 @@ struct GraphLayoutTests {
         let toCodex = try #require(graph.edges.first { $0.id == "bus->session:mock-cx" })
         #expect(toCodex.status == .working)
         #expect(toCodex.flow == .down)
-        let toFailed = try #require(graph.edges.first { $0.id.hasSuffix("->tool:cx-1") })
-        #expect(toFailed.status == .failed)
-        #expect(toFailed.flow == nil)
+        let toCall = try #require(graph.edges.first { $0.id.hasSuffix("->tool:cx-2") })
+        #expect(toCall.status == .working)
+        #expect(toCall.flow == .down)
     }
 
     @Test func idleAndEndedSessionsAreLeftOut() throws {
