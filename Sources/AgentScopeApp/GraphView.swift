@@ -44,6 +44,7 @@ struct GraphView: View {
                         .frame(width: node.frame.width, height: node.frame.height)
                         .position(x: node.frame.midX, y: node.frame.midY)
                 }
+                PortLayer(edges: graph.edges).allowsHitTesting(false)
             }
             .frame(width: graph.size.width, height: graph.size.height)
             .scaleEffect(scale, anchor: .top)
@@ -208,6 +209,29 @@ private struct EdgeLayer: View {
                 }
             }
         }
+    }
+}
+
+/// Small rings where edges meet a card's top or bottom border, drawn over the cards.
+private struct PortLayer: View {
+    let edges: [GraphEdge]
+
+    var body: some View {
+        Canvas { canvas, _ in
+            for edge in edges {
+                // "a->bus" and "a->b" leave a card's bottom; "bus->b" and "a->b" enter a card's top.
+                let parts = edge.id.components(separatedBy: "->")
+                guard parts.count == 2, let first = edge.points.first, let last = edge.points.last else { continue }
+                if parts[0] != "bus" { port(at: first, color: Palette.edge(edge.status), in: &canvas) }
+                if parts[1] != "bus" { port(at: last, color: Palette.edge(edge.status), in: &canvas) }
+            }
+        }
+    }
+
+    private func port(at point: CGPoint, color: Color, in canvas: inout GraphicsContext) {
+        let ring = Path(ellipseIn: CGRect(x: point.x - 3.5, y: point.y - 3.5, width: 7, height: 7))
+        canvas.fill(ring, with: .color(Palette.surface))
+        canvas.stroke(ring, with: .color(color), lineWidth: 1.5)
     }
 }
 

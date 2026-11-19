@@ -21,6 +21,8 @@ struct RootNodeView: View {
     }
 }
 
+/// A session in the graph: header with a status pill, what it's doing, a context bar and its latest
+/// tool call.
 struct SessionNodeView: View {
     let state: SessionState
     let now: Date
@@ -28,24 +30,33 @@ struct SessionNodeView: View {
 
     var body: some View {
         let session = state.session
+        let status = state.displayStatus
         let needsYou = session.status == .needsYou
-        HStack(spacing: 10) {
-            AgentBadge(agent: session.agent, size: 32, dimmed: session.status == .idle)
-            VStack(alignment: .leading, spacing: 1) {
+        let resting = status == .idle
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 7) {
+                AgentBadge(agent: session.agent, size: 20, dimmed: resting)
                 Text(session.agent.displayName).font(.ui(13, .semibold)).foregroundStyle(Palette.textPrimary)
-                Text([session.model.map(Format.modelName), session.place].compactMap { $0 }.joined(separator: " · "))
-                    .font(.ui(11)).foregroundStyle(Palette.textSecondary)
-                Text(session.warning.map { "⚠ \($0)" } ?? statusLine)
-                    .font(.ui(10, .semibold))
-                    .foregroundStyle(session.warning != nil ? Palette.needsYouText
-                        : session.status == .idle ? Palette.textTertiary : Palette.statusText(state.displayStatus))
-                    .padding(.top, 2)
+                Spacer(minLength: 4)
+                StatusPill(status: status, label: pillLabel, symbol: pillSymbol)
             }
-            .lineLimit(1)
-            Spacer(minLength: 0)
+            Text([session.model.map(Format.modelName), session.place].compactMap { $0 }.joined(separator: " · "))
+                .font(.ui(11)).foregroundStyle(Palette.textSecondary)
+                .padding(.leading, 27)
+                .padding(.top, 1)
+            Text(activityLine)
+                .font(.ui(12, session.warning != nil ? .semibold : .regular))
+                .foregroundStyle(session.warning != nil ? Palette.needsYouText : resting ? Palette.textSecondary : Palette.textBody)
+                .padding(.top, 7)
+            ContextMeter(fraction: session.contextUsed, color: resting ? Palette.idle : Palette.agent(session.agent))
+                .padding(.top, 6)
+            CardFooter(leading: lastCall, trailing: timeLabel)
         }
-        .padding(.horizontal, 11)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .lineLimit(1)
+        .truncationMode(.tail)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(needsYou ? Palette.sessionNeedsYouBackground : Palette.card, in: RoundedRectangle(cornerRadius: 12))
         .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(borderColor, lineWidth: needsYou || selected ? 1.5 : 1))
         .modifier(NodeHalo(
@@ -62,17 +73,57 @@ struct SessionNodeView: View {
         return Palette.nodeBorder
     }
 
-    private var statusLine: String {
+    private var pillLabel: String {
+        switch state.displayStatus {
+        case .working: "Working"
+        case .needsYou: "Needs you"
+        case .failed: "Failed"
+        case .answered: "Answered"
+        case .yourTurn: "Your turn"
+        case .idle: state.ended ? "Ended" : "Idle"
+        }
+    }
+
+    private var pillSymbol: String {
+        switch state.displayStatus {
+        case .working: "waveform"
+        case .needsYou: "hand.raised.fill"
+        case .failed: "exclamationmark.triangle.fill"
+        case .answered: "checkmark"
+        case .yourTurn: "text.bubble"
+        case .idle: state.ended ? "stop.circle" : "circle.dashed"
+        }
+    }
+
+    private var activityLine: String {
+        let session = state.session
+        if let warning = session.warning { return "⚠ \(warning)" }
+        if session.status == .needsYou, let summary = state.pendingSummary ?? state.pending?.summary, !summary.isEmpty {
+            return "Wants to run \(summary)"
+        }
+        let activity = state.activity
+        if !activity.isEmpty { return activity }
+        switch state.displayStatus {
+        case .yourTurn: return "Waiting for your reply"
+        case .working: return "Thinking…"
+        default: return "Nothing running"
+        }
+    }
+
+    private var lastCall: String {
+        guard let call = state.calls.last else { return "↳ No tool calls yet" }
+        let name = ToolSummary.displayName(call.tool)
+        if call.status == .failed { return "↳ \(name) failed" }
+        return call.summary.isEmpty ? "↳ \(name)" : "↳ \(name) · \(call.summary)"
+    }
+
+    private var timeLabel: String {
         let session = state.session
         switch state.displayStatus {
-        case .working: return "● Working · \(Format.elapsedPrecise(now.timeIntervalSince(session.startedAt)))"
-        case .needsYou: return "● Needs you"
-        case .failed: return "● \(state.activity)"
-        case .answered: return "✓ Answered"
-        case .yourTurn:
-            return "● Your turn · \(Format.elapsed(now.timeIntervalSince(session.waitingSince ?? session.lastEventAt)))"
-        case .idle:
-            return state.ended ? "Ended" : "Idle · \(Format.elapsed(now.timeIntervalSince(session.lastEventAt)))"
+        case .working: return Format.elapsedPrecise(now.timeIntervalSince(session.startedAt))
+        case .needsYou: return "waiting \(Format.elapsed(now.timeIntervalSince(state.pendingSince ?? session.lastEventAt)))"
+        case .yourTurn: return Format.elapsed(now.timeIntervalSince(session.waitingSince ?? session.lastEventAt))
+        case .failed, .answered, .idle: return "\(Format.elapsed(now.timeIntervalSince(session.lastEventAt))) ago"
         }
     }
 }
@@ -82,39 +133,125 @@ struct SubagentNodeView: View {
     let state: SessionState
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 1) {
-            Text(node.name).font(.ui(12, .semibold)).foregroundStyle(Palette.textPrimary)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Text(node.name).font(.ui(12, .semibold)).foregroundStyle(Palette.textPrimary)
+                Spacer(minLength: 4)
+                StatusPill(status: node.status == .yourTurn ? .idle : node.status, label: pillLabel, symbol: pillSymbol)
+            }
             Text(["subagent", node.model.map(Format.modelName)].compactMap { $0 }.joined(separator: " · "))
-                .font(.ui(10)).foregroundStyle(Palette.textSecondary)
-            Text(statusLine).font(.ui(10, .semibold)).foregroundStyle(statusColor)
+                .font(.ui(11)).foregroundStyle(Palette.textSecondary)
+                .padding(.top, 2)
+            CardFooter(leading: lastCall, trailing: nil)
         }
         .lineLimit(1)
+        .truncationMode(.tail)
         .padding(.horizontal, 10)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .padding(.vertical, 9)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: 10))
         .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(node.status == .needsYou ? Palette.needsYou : Palette.nodeBorder))
         .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
-        .opacity(node.status == .idle ? 0.7 : 1)
+        .opacity(node.status == .idle ? 0.75 : 1)
         .accessibilityElement(children: .combine)
     }
 
-    private var statusLine: String {
+    private var calling: Bool {
+        state.calls.contains { $0.agentNodeId == node.id && $0.finishedAt == nil }
+    }
+
+    private var pillLabel: String {
         switch node.status {
-        case .working:
-            state.calls.contains { $0.agentNodeId == node.id && $0.finishedAt == nil } ? "● Calling tool" : "● Thinking"
-        case .answered: "✓ Answered"
-        case .needsYou: "● Needs you"
-        case .failed: "● Failed"
+        case .working: calling ? "Tool" : "Thinking"
+        case .answered: "Done"
+        case .needsYou: "Needs you"
+        case .failed: "Failed"
         case .idle, .yourTurn: "Done"
         }
     }
 
-    private var statusColor: Color {
+    private var pillSymbol: String {
         switch node.status {
-        case .answered: Palette.answeredText
-        case .idle: Palette.textTertiary
-        default: Palette.statusText(node.status)
+        case .working: calling ? "wrench.and.screwdriver" : "waveform"
+        case .answered, .idle, .yourTurn: "checkmark"
+        case .needsYou: "hand.raised.fill"
+        case .failed: "exclamationmark.triangle.fill"
         }
+    }
+
+    private var lastCall: String {
+        guard let call = state.calls.last(where: { $0.agentNodeId == node.id }) else { return "↳ Starting…" }
+        let name = ToolSummary.displayName(call.tool)
+        if call.status == .failed { return "↳ \(name) failed" }
+        return call.summary.isEmpty ? "↳ \(name)" : "↳ \(name) · \(call.summary)"
+    }
+}
+
+/// Status chip in a graph card's top-right corner.
+struct StatusPill: View {
+    let status: NodeStatus
+    let label: String
+    let symbol: String
+
+    var body: some View {
+        HStack(spacing: 3) {
+            Image(systemName: symbol).font(.system(size: 8.5, weight: .bold))
+            Text(label).font(.ui(10.5, .medium))
+        }
+        .lineLimit(1)
+        .fixedSize()
+        .foregroundStyle(status == .idle ? Palette.textTertiary : Palette.statusText(status))
+        .padding(.horizontal, 6)
+        .padding(.vertical, 2.5)
+        .background(tint.opacity(status == .idle ? 1 : 0.14), in: RoundedRectangle(cornerRadius: 6))
+    }
+
+    private var tint: Color {
+        switch status {
+        case .idle: Palette.hover
+        case .answered, .yourTurn: Palette.answer
+        default: Palette.edge(status)
+        }
+    }
+}
+
+/// Thin context-window meter with its percentage.
+private struct ContextMeter: View {
+    let fraction: Double?
+    let color: Color
+
+    var body: some View {
+        HStack(spacing: 8) {
+            GeometryReader { proxy in
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Palette.hairline)
+                    Capsule().fill(color).frame(width: proxy.size.width * min(1, max(0, fraction ?? 0)))
+                }
+            }
+            .frame(height: 3)
+            Text(fraction.map { "\(Format.percent($0)) context" } ?? "— context")
+                .font(.ui(10.5)).monospacedDigit().foregroundStyle(Palette.textTertiary)
+                .fixedSize()
+        }
+    }
+}
+
+/// Hairline-separated last line of a graph card: the latest call and a time.
+private struct CardFooter: View {
+    let leading: String
+    let trailing: String?
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(leading).font(.mono(10.5)).foregroundStyle(Palette.textTertiary)
+            Spacer(minLength: 0)
+            if let trailing {
+                Text(trailing).font(.ui(10.5)).monospacedDigit().foregroundStyle(Palette.textTertiary).fixedSize()
+            }
+        }
+        .padding(.top, 6)
+        .overlay(alignment: .top) { Rectangle().fill(Palette.hairline).frame(height: 1) }
+        .padding(.top, 7)
     }
 }
 
