@@ -3,6 +3,8 @@ import SwiftUI
 
 struct GraphPanel: View {
     @Environment(AppModel.self) private var model
+    /// The event log under the graph; closed by default, opened from the header.
+    @AppStorage("graph.logVisible") private var logVisible = false
 
     var body: some View {
         let store = model.activeStore
@@ -20,12 +22,16 @@ struct GraphPanel: View {
             .padding(EdgeInsets(top: 20, leading: 20, bottom: 0, trailing: 20))
             .layoutPriority(1)
             Legend()
-            FeedView(items: store.feed, selected: model.selectedSessionId.flatMap { store.sessions[$0] }?.session) {
-                model.selectedSessionId = nil
-            }
+            if logVisible {
+                FeedView(items: store.feed, selected: model.selectedSessionId.flatMap { store.sessions[$0] }?.session) {
+                    model.selectedSessionId = nil
+                }
                 .frame(height: 170)
                 .padding(EdgeInsets(top: 0, leading: 20, bottom: 16, trailing: 20))
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
         }
+        .animation(.easeInOut(duration: 0.2), value: logVisible)
         .background(Palette.surface)
     }
 
@@ -44,6 +50,19 @@ struct GraphPanel: View {
                 stat(store.callsPerMinute(), "calls/min")
                 stat(needsYou, "needs you")
             }
+            Button {
+                logVisible.toggle()
+            } label: {
+                Image(systemName: "terminal")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(logVisible ? Palette.call : Palette.textSecondary)
+                    .frame(width: 28, height: 24)
+                    .background(logVisible ? Palette.call.opacity(0.12) : .clear, in: RoundedRectangle(cornerRadius: 6))
+            }
+            .buttonStyle(HoverButtonStyle(cornerRadius: 6))
+            .keyboardShortcut("l", modifiers: [.command, .option])
+            .help(logVisible ? "Hide event log (⌥⌘L)" : "Show event log (⌥⌘L)")
+            .padding(.leading, 6)
         }
         .padding(.horizontal, 24)
         .frame(height: 56)

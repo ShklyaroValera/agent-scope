@@ -1,19 +1,32 @@
 import AgentScopeKit
+import AppKit
 import SwiftUI
 
 /// The "Agent Graph" window, after `design/main-window.html`.
 struct MainWindow: View {
     @Environment(AppModel.self) private var model
     @Environment(\.openSettings) private var openSettings
+    @AppStorage("mainWindow.sidebarVisible") private var sidebarVisible = true
+    @State private var window: NSWindow?
+    @State private var fullScreen = false
 
     var body: some View {
         @Bindable var model = model
-        NavigationSplitView {
+        NavigationSplitView(columnVisibility: Binding(
+            get: { sidebarVisible ? .all : .detailOnly },
+            set: { sidebarVisible = $0 != .detailOnly }
+        )) {
             SidebarView()
-                .navigationSplitViewColumnWidth(260)
-                .toolbar(removing: .sidebarToggle)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 260, max: 380)
         } detail: {
             MainContent()
+        }
+        .background(WindowAccessor { window = $0 })
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { note in
+            if note.object as? NSWindow === window { fullScreen = true }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { note in
+            if note.object as? NSWindow === window { fullScreen = false }
         }
         .navigationTitle("AgentScope")
         .navigationSubtitle("\(Host.current().localizedName ?? "This Mac") · local")
@@ -28,6 +41,13 @@ struct MainWindow: View {
                     .labelsHidden()
                 }
                 Button {
+                    window?.toggleFullScreen(nil)
+                } label: {
+                    Image(systemName: fullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
+                }
+                .keyboardShortcut("f", modifiers: [.command, .control])
+                .help(fullScreen ? "Exit full screen (⌃⌘F)" : "Enter full screen (⌃⌘F)")
+                Button {
                     openSettings()
                 } label: {
                     Image(systemName: "gearshape")
@@ -37,6 +57,25 @@ struct MainWindow: View {
         }
         .frame(minWidth: 960, minHeight: 640)
     }
+}
+
+/// Hands the hosting `NSWindow` to SwiftUI and lets it go full screen: an accessory (menu bar) app's
+/// windows only zoom by default.
+private struct WindowAccessor: NSViewRepresentable {
+    let onWindow: (NSWindow) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async {
+            guard let window = view.window else { return }
+            window.collectionBehavior.insert(.fullScreenPrimary)
+            window.collectionBehavior.remove(.fullScreenAuxiliary)
+            onWindow(window)
+        }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// Everything right of the sidebar; also rendered on its own for debug snapshots.
