@@ -4,7 +4,7 @@
 # scripts/release.sh fills in version and sha256; .github/workflows/release.yml runs it on a v* tag.
 cask "agentscope" do
   version "0.1.0"
-  sha256 "REPLACE_WITH_SHA256"
+  sha256 "3f41a7930ee67f4888139967a83c0995cb2d9216afd38fee837a5096c220df8f"
 
   url "https://github.com/ShklyaroValera/agent-scope/releases/download/v#{version}/AgentScope-#{version}.zip"
   name "AgentScope"
