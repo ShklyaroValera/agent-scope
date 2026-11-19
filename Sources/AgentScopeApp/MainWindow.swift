@@ -64,18 +64,30 @@ struct MainWindow: View {
 private struct WindowAccessor: NSViewRepresentable {
     let onWindow: (NSWindow) -> Void
 
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async {
-            guard let window = view.window else { return }
-            window.collectionBehavior.insert(.fullScreenPrimary)
-            window.collectionBehavior.remove(.fullScreenAuxiliary)
+    func makeNSView(context: Context) -> NSView { WindowView(onWindow: onWindow) }
+    func updateNSView(_ nsView: NSView, context: Context) {}
+
+    /// Reports its window once it is actually in one; `makeNSView` runs before that.
+    private final class WindowView: NSView {
+        let onWindow: (NSWindow) -> Void
+
+        init(onWindow: @escaping (NSWindow) -> Void) {
+            self.onWindow = onWindow
+            super.init(frame: .zero)
+        }
+
+        required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
+
+        override func viewDidMoveToWindow() {
+            super.viewDidMoveToWindow()
+            guard let window else { return }
+            // SwiftUI marks an accessory app's windows `.fullScreenNone` and `.auxiliary`, which turns the
+            // green button into plain zoom.
+            window.collectionBehavior.remove([.fullScreenNone, .fullScreenAuxiliary, .auxiliary])
+            window.collectionBehavior.insert([.fullScreenPrimary, .primary])
             onWindow(window)
         }
-        return view
     }
-
-    func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
 /// Everything right of the sidebar; also rendered on its own for debug snapshots.
