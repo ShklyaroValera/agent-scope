@@ -120,6 +120,31 @@ final class AppModel {
                 }
                 return Data("ok\n".utf8)
             }
+            // Opens the graph window (when asked) and reports each window's full-screen flags.
+            if let request = try? JSONValue(parsing: line), request["type"] == "debug-windows" {
+                let open = request["open"]?.boolValue ?? false
+                if open {
+                    DispatchQueue.main.sync { MainActor.assumeIsolated { self?.openGraphWindow?() } }
+                    Thread.sleep(forTimeInterval: 1)
+                }
+                if request["toggleFullScreen"]?.boolValue == true {
+                    DispatchQueue.main.sync {
+                        MainActor.assumeIsolated {
+                            NSApp.windows.first { $0.collectionBehavior.contains(.fullScreenPrimary) }?.toggleFullScreen(nil)
+                        }
+                    }
+                    Thread.sleep(forTimeInterval: 2)
+                }
+                let report = DispatchQueue.main.sync {
+                    MainActor.assumeIsolated {
+                        NSApp.windows.map { window in
+                            "\(window.title.isEmpty ? "-" : window.title) behavior=\(window.collectionBehavior.rawValue) "
+                                + "fullScreen=\(window.styleMask.contains(.fullScreen)) visible=\(window.isVisible)"
+                        }.joined(separator: "\n")
+                    }
+                }
+                return Data((report + "\n").utf8)
+            }
             // Stands in for clicking Allow/Deny in end-to-end tests.
             if let request = try? JSONValue(parsing: line), request["type"] == "debug-decide" {
                 let allow = request["allow"]?.boolValue ?? false

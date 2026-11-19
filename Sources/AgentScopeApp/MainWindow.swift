@@ -67,9 +67,12 @@ private struct WindowAccessor: NSViewRepresentable {
     func makeNSView(context: Context) -> NSView { WindowView(onWindow: onWindow) }
     func updateNSView(_ nsView: NSView, context: Context) {}
 
-    /// Reports its window once it is actually in one; `makeNSView` runs before that.
+    /// Reports its window once it is actually in one (`makeNSView` runs before that) and keeps it
+    /// able to go full screen: SwiftUI marks an accessory app's windows `.fullScreenNone` and
+    /// `.auxiliary` again on every update, which turns the green button back into plain zoom.
     private final class WindowView: NSView {
         let onWindow: (NSWindow) -> Void
+        private var observation: NSKeyValueObservation?
 
         init(onWindow: @escaping (NSWindow) -> Void) {
             self.onWindow = onWindow
@@ -80,12 +83,20 @@ private struct WindowAccessor: NSViewRepresentable {
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
+            observation = nil
             guard let window else { return }
-            // SwiftUI marks an accessory app's windows `.fullScreenNone` and `.auxiliary`, which turns the
-            // green button into plain zoom.
-            window.collectionBehavior.remove([.fullScreenNone, .fullScreenAuxiliary, .auxiliary])
-            window.collectionBehavior.insert([.fullScreenPrimary, .primary])
+            Self.allowFullScreen(window)
+            observation = window.observe(\.collectionBehavior) { window, _ in
+                DispatchQueue.main.async { Self.allowFullScreen(window) }
+            }
             onWindow(window)
+        }
+
+        private static func allowFullScreen(_ window: NSWindow) {
+            var behavior = window.collectionBehavior
+            behavior.remove([.fullScreenNone, .fullScreenAuxiliary, .auxiliary])
+            behavior.insert([.fullScreenPrimary, .primary])
+            if behavior != window.collectionBehavior { window.collectionBehavior = behavior }
         }
     }
 }

@@ -70,7 +70,7 @@ struct SessionNodeView: View {
     private var borderColor: Color {
         if state.session.status == .needsYou { return Palette.needsYou }
         if selected { return Palette.agent(state.session.agent) }
-        return Palette.nodeBorder
+        return Palette.statusBorder(state.displayStatus)
     }
 
     private var pillLabel: String {
@@ -150,7 +150,7 @@ struct SubagentNodeView: View {
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(node.status == .needsYou ? Palette.needsYou : Palette.nodeBorder))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.statusBorder(node.status == .yourTurn ? .idle : node.status)))
         .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
         .opacity(node.status == .idle ? 0.75 : 1)
         .accessibilityElement(children: .combine)
@@ -396,7 +396,8 @@ struct ToolChipView: View {
         switch call.status {
         case .working, .needsYou: Palette.toolWorkingBorder
         case .failed: Palette.toolFailedBorder
-        default: Palette.nodeBorder
+        case .idle: Palette.nodeBorder
+        default: Palette.statusBorder(.answered)
         }
     }
 

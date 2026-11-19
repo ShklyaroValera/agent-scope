@@ -78,6 +78,23 @@ struct GraphLayoutTests {
         #expect(toFailed.flow == nil)
     }
 
+    @Test func idleAndEndedSessionsAreLeftOut() throws {
+        let store = EventStore(now: now)
+        store.processIsAlive = { _ in true }
+        func send(_ session: String, _ kind: EventKind) {
+            store.apply(AgentEvent(ts: now, agent: .claude, sessionId: session, cwd: "/p/\(session)", kind: kind))
+        }
+        send("busy", .sessionStarted(source: nil))
+        send("busy", .promptSubmitted)
+        send("quiet", .sessionStarted(source: nil))
+        send("gone", .sessionStarted(source: nil))
+        send("gone", .sessionEnded(reason: nil))
+        let graph = GraphBuilder.build(sessions: Array(store.sessions.values), now: now)
+        let shown = graph.nodes.compactMap { node -> String? in if case .session(let id) = node.kind { id } else { nil } }
+        #expect(shown == ["busy"])
+        #expect(try node(graph, "root").kind == .root(active: 1, idle: 2))
+    }
+
     @Test func manySubagentsAreCapped() {
         let store = EventStore(now: now)
         store.processIsAlive = { _ in true }

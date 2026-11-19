@@ -22,6 +22,7 @@ Native macOS menu bar app + CLI that visualizes running AI coding agents (Claude
 - `agentscope doctor` checks app, hooks, Codex trust and hook speed on a real machine.
 - App bundle: `scripts/build-app.sh [debug|release] [--universal]` → `build/AgentScope.app` (CLI at `Contents/Helpers/agentscope`).
 - Visual check without clicking the menu bar (debug builds): `AGENTSCOPE_SNAPSHOT=<dir> $(swift build --show-bin-path)/AgentScopeApp` writes light/dark PNGs of the popover and other views, then quits.
+- Window checks (debug builds): `{"type":"debug-windows","open":true}` on the socket opens the graph window and prints each window's `collectionBehavior` and full-screen state; add `"toggleFullScreen":true` to flip it.
 - Allow/Deny end-to-end: `scripts/allow-deny-e2e.sh` (debug app + real `claude -p` on haiku; costs two short runs).
 - Live UI without screen access (debug builds): send `{"type":"debug-render","dir":"<dir>"}` to the socket; the running app renders its popover and main window to PNG.
 - End-to-end: `scripts/integration-test.sh` (fixtures → real `agentscope hook` → spool/socket → app → `agentscope status`; isolated `AGENTSCOPE_HOME`).

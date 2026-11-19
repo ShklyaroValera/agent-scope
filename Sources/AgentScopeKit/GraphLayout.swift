@@ -90,7 +90,8 @@ public enum GraphBuilder {
             id: "root", kind: .root(active: ordered.count - idle, idle: idle), status: idle == ordered.count ? .idle : .working,
             size: metrics.root
         )
-        root.children = ordered.map { sessionItem($0, now: now, metrics: metrics) }
+        // Idle and ended sessions are only counted on the root node; the graph shows what is going on.
+        root.children = ordered.filter { $0.displayStatus != .idle }.map { sessionItem($0, now: now, metrics: metrics) }
 
         var nodes: [GraphNode] = []
         var edges: [GraphEdge] = []

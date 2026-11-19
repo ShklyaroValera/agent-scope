@@ -79,6 +79,15 @@ enum Palette {
         }
     }
 
+    /// Card outlines in the graph, in the colour of the card's state.
+    static func statusBorder(_ status: NodeStatus) -> Color {
+        switch status {
+        case .needsYou: needsYou
+        case .idle: nodeBorder
+        default: edge(status).opacity(0.6)
+        }
+    }
+
     static func statusText(_ status: NodeStatus) -> Color {
         switch status {
         case .working: call
