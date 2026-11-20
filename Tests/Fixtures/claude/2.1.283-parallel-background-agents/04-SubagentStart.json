@@ -1,0 +1,10 @@
+{
+  "session_id": "c27c2f65-b77a-477a-a37f-3f8f422af3b3",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/c27c2f65-b77a-477a-a37f-3f8f422af3b3.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "32002960-3ee3-45b8-bb94-33eece8ad5d7",
+  "agent_id": "a3bc1ae4badafd985",
+  "agent_type": "general-purpose",
+  "hook_event_name": "SubagentStart"
+}

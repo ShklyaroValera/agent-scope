@@ -147,7 +147,7 @@ struct GraphView: View {
         case .subagent(let sessionId, let nodeId):
             if let state = states[sessionId], let agent = state.nodes.first(where: { $0.id == nodeId }) {
                 inspectable(node, state: state) {
-                    SubagentNodeView(node: agent, state: state)
+                    SubagentNodeView(node: agent, status: node.status, state: state)
                 }
             }
         case .tool(let sessionId, let callId):

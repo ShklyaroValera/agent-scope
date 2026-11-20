@@ -1,0 +1,13 @@
+{
+  "session_id": "e4b8e2c7-d82b-424a-9d4d-dea6e685c28b",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/e4b8e2c7-d82b-424a-9d4d-dea6e685c28b.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "62920938-06b9-410d-b726-d03d2a9db611",
+  "permission_mode": "default",
+  "hook_event_name": "Stop",
+  "stop_hook_active": false,
+  "last_assistant_message": "Agent completed. Output: `done`",
+  "background_tasks": [],
+  "session_crons": []
+}

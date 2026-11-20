@@ -1,0 +1,10 @@
+{
+  "session_id": "e4b8e2c7-d82b-424a-9d4d-dea6e685c28b",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/e4b8e2c7-d82b-424a-9d4d-dea6e685c28b.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "fada2ac0-f326-422a-becb-f11c81a4e55c",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "Launch ONE subagent with the Agent tool (subagent_type general-purpose, run_in_background true) whose task is: run the bash command 'sleep 8 && echo done' and report the output. Do not wait for it; immediately reply with the single word 'launched'.\n"
+}

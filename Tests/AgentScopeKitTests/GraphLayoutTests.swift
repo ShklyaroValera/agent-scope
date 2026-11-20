@@ -154,3 +154,54 @@ struct ToolCardTests {
         #expect(Format.callDuration(252) == "4m 12s")
     }
 }
+
+/// Claude Code 2.1.283 background subagents: main launches them and ends its turn (Stop) while they run;
+/// each hand-back wakes main with a `<task-notification>` prompt. Fixture envelopes are one second apart.
+@MainActor
+struct BackgroundSubagentGraphTests {
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func replay(_ version: String, upTo count: Int, at seconds: TimeInterval) throws -> (SessionState, GraphModel) {
+        let store = EventStore(now: start)
+        store.processIsAlive = { _ in true }
+        let envelopes = try FixtureLoader.envelopes("claude", version, start: start)
+        store.apply(envelopes.prefix(count).flatMap(Normalizer.normalize))
+        let state = try #require(store.sessions.values.first)
+        return (state, GraphBuilder.build(sessions: [state], now: start.addingTimeInterval(seconds)))
+    }
+
+    func subagents(_ graph: GraphModel) -> [NodeStatus] {
+        graph.nodes.compactMap { if case .subagent = $0.kind { $0.status } else { nil } }
+    }
+
+    @Test func runningAfterMainStops() throws {
+        // 07-Stop arrives while the subagent's sleep is still running.
+        let (state, graph) = try replay("2.1.283-background-agent", upTo: 7, at: 7)
+        #expect(state.session.status == .working)
+        #expect(subagents(graph) == [.working])
+    }
+
+    @Test func lastHandBackStaysVisibleWhileItIsYourTurn() throws {
+        // 09-SubagentStop: nothing else runs, so the session is back to your turn.
+        let (state, graph) = try replay("2.1.283-background-agent", upTo: 9, at: 10)
+        #expect(state.session.status == .yourTurn)
+        #expect(subagents(graph) == [.answered])
+
+        let (_, later) = try replay("2.1.283-background-agent", upTo: 9, at: 8 + GraphBuilder.finishedSubagentRetention + 1)
+        #expect(subagents(later).isEmpty)
+    }
+
+    @Test func parallelSubagentsBothShown() throws {
+        let (_, both) = try replay("2.1.283-parallel-background-agents", upTo: 12, at: 12)
+        #expect(subagents(both) == [.working, .working])
+
+        // A handed back (13), main answered it and stopped (15): A reads done, not idle, next to running B.
+        let (_, afterA) = try replay("2.1.283-parallel-background-agents", upTo: 15, at: 15)
+        #expect(subagents(afterA) == [.answered, .working])
+
+        // B handed back (17): your turn, both answers still on screen.
+        let (state, afterB) = try replay("2.1.283-parallel-background-agents", upTo: 17, at: 17)
+        #expect(state.session.status == .yourTurn)
+        #expect(subagents(afterB) == [.answered, .answered])
+    }
+}

@@ -130,6 +130,8 @@ struct SessionNodeView: View {
 
 struct SubagentNodeView: View {
     let node: AgentNode
+    /// From the graph: a subagent that just handed back reads as answered.
+    let status: NodeStatus
     let state: SessionState
 
     var body: some View {
@@ -137,7 +139,7 @@ struct SubagentNodeView: View {
             HStack(spacing: 6) {
                 Text(node.name).font(.ui(12, .semibold)).foregroundStyle(Palette.textPrimary)
                 Spacer(minLength: 4)
-                StatusPill(status: node.status == .yourTurn ? .idle : node.status, label: pillLabel, symbol: pillSymbol)
+                StatusPill(status: status == .yourTurn ? .idle : status, label: pillLabel, symbol: pillSymbol)
             }
             Text(["subagent", node.model.map(Format.modelName)].compactMap { $0 }.joined(separator: " · "))
                 .font(.ui(11)).foregroundStyle(Palette.textSecondary)
@@ -150,9 +152,9 @@ struct SubagentNodeView: View {
         .padding(.vertical, 9)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Palette.card, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.statusBorder(node.status == .yourTurn ? .idle : node.status)))
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Palette.statusBorder(status == .yourTurn ? .idle : status)))
         .shadow(color: .black.opacity(0.05), radius: 4, y: 2)
-        .opacity(node.status == .idle ? 0.75 : 1)
+        .opacity(status == .idle ? 0.75 : 1)
         .accessibilityElement(children: .combine)
     }
 
@@ -161,7 +163,7 @@ struct SubagentNodeView: View {
     }
 
     private var pillLabel: String {
-        switch node.status {
+        switch status {
         case .working: calling ? "Tool" : "Thinking"
         case .answered: "Done"
         case .needsYou: "Needs you"
@@ -171,7 +173,7 @@ struct SubagentNodeView: View {
     }
 
     private var pillSymbol: String {
-        switch node.status {
+        switch status {
         case .working: calling ? "wrench.and.screwdriver" : "waveform"
         case .answered, .idle, .yourTurn: "checkmark"
         case .needsYou: "hand.raised.fill"

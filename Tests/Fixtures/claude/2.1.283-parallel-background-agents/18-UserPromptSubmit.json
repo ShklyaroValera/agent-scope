@@ -1,0 +1,10 @@
+{
+  "session_id": "c27c2f65-b77a-477a-a37f-3f8f422af3b3",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/c27c2f65-b77a-477a-a37f-3f8f422af3b3.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "7a310c86-8956-4d21-a021-989f9fc9e479",
+  "permission_mode": "default",
+  "hook_event_name": "UserPromptSubmit",
+  "prompt": "<task-notification>\n<task-id>aa6eecbd9cb39f6b8</task-id>\n<tool-use-id>toolu_01NYQkrL83s3LcU2r6FTbUtM</tool-use-id>\n<output-file>/tmp/scratch\n<status>completed</status>\n<summary>Agent \"Agent B - sleep and echo\" finished</summary>\n<note>A task-notification fires each time this agent stops with no live background children of its own. The user can send it another message and resume it, so the same task-id may notify more than once.</note>\n<result>Done. The command executed successfully and printed `B` after sleeping for 20 seconds.</result>\n<usage><subagent_tokens>22563</subagent_tokens><tool_uses>1</tool_uses><duration_ms>26511</duration_ms></usage>\n</task-notification>"
+}

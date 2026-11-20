@@ -1,0 +1,24 @@
+{
+  "session_id": "e4b8e2c7-d82b-424a-9d4d-dea6e685c28b",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/e4b8e2c7-d82b-424a-9d4d-dea6e685c28b.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "fada2ac0-f326-422a-becb-f11c81a4e55c",
+  "permission_mode": "default",
+  "agent_id": "a7c28716dfa02a4ee",
+  "agent_type": "general-purpose",
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/e4b8e2c7-d82b-424a-9d4d-dea6e685c28b/subagents/agent-a7c28716dfa02a4ee.jsonl",
+  "last_assistant_message": "The command completed successfully. After sleeping for 8 seconds, it output:\n\n```\ndone\n```",
+  "background_tasks": [
+    {
+      "id": "a7c28716dfa02a4ee",
+      "type": "subagent",
+      "status": "running",
+      "description": "Run bash command and report output",
+      "agent_type": "general-purpose"
+    }
+  ],
+  "session_crons": []
+}

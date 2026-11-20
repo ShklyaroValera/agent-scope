@@ -1,0 +1,28 @@
+{
+  "session_id": "e4b8e2c7-d82b-424a-9d4d-dea6e685c28b",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/e4b8e2c7-d82b-424a-9d4d-dea6e685c28b.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "fada2ac0-f326-422a-becb-f11c81a4e55c",
+  "permission_mode": "default",
+  "hook_event_name": "PostToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "Run bash command and report output",
+    "prompt": "Run the bash command 'sleep 8 && echo done' and report the output.",
+    "subagent_type": "general-purpose",
+    "run_in_background": true
+  },
+  "tool_response": {
+    "isAsync": true,
+    "status": "async_launched",
+    "agentId": "a7c28716dfa02a4ee",
+    "description": "Run bash command and report output",
+    "resolvedModel": "claude-haiku-4-5-20251001",
+    "prompt": "Run the bash command 'sleep 8 && echo done' and report the output.",
+    "outputFile": "/tmp/scratch",
+    "canReadOutputFile": true
+  },
+  "tool_use_id": "toolu_01MXDaxeBRVUbSYMrE4svDwS",
+  "duration_ms": 5
+}

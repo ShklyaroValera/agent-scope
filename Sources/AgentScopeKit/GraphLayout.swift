@@ -118,8 +118,13 @@ public enum GraphBuilder {
             id: "session:\(id)", kind: .session(sessionId: id), status: status, size: metrics.session,
             flow: status == .working ? .down : nil
         )
-        // Sessions that aren't working stay compact.
-        guard !status.isResting else { return item }
+        // Sessions that aren't working stay compact, apart from subagents that just handed back:
+        // a background subagent's answer often arrives after main has ended its turn.
+        guard !status.isResting else {
+            item.children = recentSubagents(of: state, now: now).filter { !$0.isActive }
+                .map { subagentItem($0, in: state, now: now, metrics: metrics) }
+            return item
+        }
         let mainNeedsYou = state.session.status == .needsYou && state.pendingAgentId == nil
         if let pending = state.pending, mainNeedsYou {
             item.children.append(Item(
@@ -127,21 +132,8 @@ public enum GraphBuilder {
             ))
         }
 
-        // Running subagents, plus finished ones for a few seconds so the answer is seen arriving.
-        let subagents = state.nodes.filter { node in
-            node.parentId != nil && (node.isActive
-                || node.finishedAt.map { now.timeIntervalSince($0) < finishedSubagentRetention } ?? false)
-        }
-        let shown = Array((subagents.filter(\.isActive) + subagents.filter { !$0.isActive }.reversed()).prefix(maxSubagents))
-        let shownIds = Set(shown.map(\.id))
-        for node in subagents where shownIds.contains(node.id) {
-            var child = Item(
-                id: "agent:\(node.id)", kind: .subagent(sessionId: id, nodeId: node.id), status: node.status, size: metrics.subagent,
-                flow: node.status == .working ? .down : node.status == .answered ? .up : nil
-            )
-            child.children = chain(calls(of: node.id, in: state, limit: 1), sessionId: id, now: now, metrics: metrics)
-            item.children.append(child)
-        }
+        let shown = recentSubagents(of: state, now: now)
+        item.children += shown.map { subagentItem($0, in: state, now: now, metrics: metrics) }
 
         // The permission card already shows the main agent's blocked call.
         if !mainNeedsYou {
@@ -150,6 +142,25 @@ public enum GraphBuilder {
             let mainChain = shown.isEmpty ? mainCalls : mainCalls.filter { $0.finishedAt == nil }
             item.children += chain(mainChain, sessionId: id, now: now, metrics: metrics)
         }
+        return item
+    }
+
+    /// Running subagents, plus finished ones for a few seconds so the answer is seen arriving; in start order.
+    private static func recentSubagents(of state: SessionState, now: Date) -> [AgentNode] {
+        let subagents = state.nodes.filter { node in
+            node.parentId != nil && (node.isActive || node.justFinished(at: now))
+        }
+        let shown = Set((subagents.filter(\.isActive) + subagents.filter { !$0.isActive }.reversed()).prefix(maxSubagents).map(\.id))
+        return subagents.filter { shown.contains($0.id) }
+    }
+
+    private static func subagentItem(_ node: AgentNode, in state: SessionState, now: Date, metrics: Metrics) -> Item {
+        let status = node.graphStatus(at: now)
+        var item = Item(
+            id: "agent:\(node.id)", kind: .subagent(sessionId: state.session.id, nodeId: node.id), status: status,
+            size: metrics.subagent, flow: status == .working ? .down : status == .answered ? .up : nil
+        )
+        item.children = chain(calls(of: node.id, in: state, limit: 1), sessionId: state.session.id, now: now, metrics: metrics)
         return item
     }
 
@@ -235,4 +246,13 @@ extension SessionState {
 
 extension AgentNode {
     var isActive: Bool { status == .working || status == .needsYou }
+
+    func justFinished(at now: Date) -> Bool {
+        finishedAt.map { now.timeIntervalSince($0) < GraphBuilder.finishedSubagentRetention } ?? false
+    }
+
+    /// A subagent that handed back a moment ago reads as answered, even once main's Stop has reset it to idle.
+    public func graphStatus(at now: Date) -> NodeStatus {
+        !isActive && justFinished(at: now) ? .answered : status
+    }
 }

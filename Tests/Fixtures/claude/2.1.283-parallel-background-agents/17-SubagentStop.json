@@ -1,0 +1,24 @@
+{
+  "session_id": "c27c2f65-b77a-477a-a37f-3f8f422af3b3",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/c27c2f65-b77a-477a-a37f-3f8f422af3b3.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "585328c0-3ba6-475a-8b55-137542155b9b",
+  "permission_mode": "default",
+  "agent_id": "aa6eecbd9cb39f6b8",
+  "agent_type": "general-purpose",
+  "hook_event_name": "SubagentStop",
+  "stop_hook_active": false,
+  "agent_transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/c27c2f65-b77a-477a-a37f-3f8f422af3b3/subagents/agent-aa6eecbd9cb39f6b8.jsonl",
+  "last_assistant_message": "Done. The command executed successfully and printed `B` after sleeping for 20 seconds.",
+  "background_tasks": [
+    {
+      "id": "aa6eecbd9cb39f6b8",
+      "type": "subagent",
+      "status": "running",
+      "description": "Agent B - sleep and echo",
+      "agent_type": "general-purpose"
+    }
+  ],
+  "session_crons": []
+}
