@@ -1,0 +1,20 @@
+{
+  "session_id": "756d88be-8f0b-4f7c-9e17-ef9fb1016cc7",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/756d88be-8f0b-4f7c-9e17-ef9fb1016cc7.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "f8499c09-348d-4763-a0d1-0abc9ba00e31",
+  "permission_mode": "auto",
+  "effort": {
+    "level": "high"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Agent",
+  "tool_input": {
+    "description": "Foreground capture probe",
+    "prompt": "Harmless probe for a hook capture. Do NOT modify files. Run the bash command `echo probe` once, then reply with the single word: done.",
+    "subagent_type": "general-purpose",
+    "model": "haiku"
+  },
+  "tool_use_id": "toolu_01GghzV3YGYu6VhrkWZvAQYb"
+}

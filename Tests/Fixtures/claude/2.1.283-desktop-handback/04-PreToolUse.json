@@ -1,0 +1,20 @@
+{
+  "session_id": "756d88be-8f0b-4f7c-9e17-ef9fb1016cc7",
+  "transcript_path": "/Users/me/.claude/projects/-Users-me-dev-demo/756d88be-8f0b-4f7c-9e17-ef9fb1016cc7.jsonl",
+  "cwd": "/Users/me/dev/demo",
+  "scratchpad_dir": "/tmp/scratch",
+  "prompt_id": "f8499c09-348d-4763-a0d1-0abc9ba00e31",
+  "permission_mode": "auto",
+  "agent_id": "aff1511e77561b27e",
+  "agent_type": "general-purpose",
+  "effort": {
+    "level": "medium"
+  },
+  "hook_event_name": "PreToolUse",
+  "tool_name": "Bash",
+  "tool_input": {
+    "command": "echo probe",
+    "description": "Run the harmless echo probe"
+  },
+  "tool_use_id": "toolu_01UbPFqzjXnjtF6UE8gNhZNj"
+}

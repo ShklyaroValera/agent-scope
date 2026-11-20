@@ -282,7 +282,8 @@ public final class EventStore {
 
         case .subagentStopped(let id):
             let nodeId = SessionState.nodeId(session: event.sessionId, agentId: id)
-            if let index = state.nodes.firstIndex(where: { $0.id == nodeId }) {
+            // The hand-back already ended it; SubagentStop may still follow.
+            if let index = state.nodes.firstIndex(where: { $0.id == nodeId }), state.nodes[index].finishedAt == nil {
                 state.nodes[index].status = .answered
                 state.nodes[index].finishedAt = event.ts
                 closeCalls(of: nodeId, at: event.ts, in: &state)

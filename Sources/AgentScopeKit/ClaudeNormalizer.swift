@@ -99,6 +99,11 @@ struct HookPayloadNormalizer {
         if name == "posttooluse", let subagent = result?["agentId"]?.stringValue {
             kinds.append(.subagentInfo(id: subagent, model: result?["resolvedModel"]?.stringValue))
         }
+        // A subagent's hand-back is its last act. The Claude app does not always follow it with
+        // SubagentStop (seen with a foreground web-fetch subagent), so it ends the subagent too.
+        if name == "posttooluse", string("tool_name", "toolName") == "SubagentHandback", let agentId {
+            kinds.append(.subagentStopped(id: agentId))
+        }
         return kinds.map {
             Normalizer.event(
                 envelope, agent: agent, sessionId: sessionId, cwd: cwd, kind: $0,

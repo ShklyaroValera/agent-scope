@@ -205,3 +205,33 @@ struct BackgroundSubagentGraphTests {
         #expect(subagents(afterB) == [.answered, .answered])
     }
 }
+
+/// Claude app 2.1.283: a subagent ends with a SubagentHandback call, then SubagentStop (08).
+@MainActor
+struct SubagentHandbackTests {
+    let start = Date(timeIntervalSince1970: 1_800_000_000)
+
+    func replay(_ count: Int, skipping skipped: Set<String> = []) throws -> SessionState {
+        let store = EventStore(now: start)
+        store.processIsAlive = { _ in true }
+        let envelopes = try FixtureLoader.envelopes("claude", "2.1.283-desktop-handback", start: start)
+            .prefix(count).filter { !skipped.contains($0.event ?? "") }
+        store.apply(envelopes.flatMap(Normalizer.normalize))
+        return try #require(store.sessions.values.first)
+    }
+
+    @Test func handBackEndsTheSubagentWithoutSubagentStop() throws {
+        let running = try replay(6)
+        #expect(running.activeSubagents.count == 1)
+
+        let handedBack = try replay(8, skipping: ["SubagentStop"])
+        #expect(handedBack.activeSubagents.isEmpty)
+        #expect(handedBack.nodes.last?.status == .answered)
+    }
+
+    @Test func laterSubagentStopKeepsTheHandBackTime() throws {
+        let state = try replay(8)
+        #expect(state.nodes.last?.status == .answered)
+        #expect(state.nodes.last?.finishedAt == start.addingTimeInterval(6))
+    }
+}
