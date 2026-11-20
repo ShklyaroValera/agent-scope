@@ -21,6 +21,7 @@ A macOS menu bar app and CLI that shows every AI coding agent running on your Ma
 - **Guardrails:** optional limits for one session's cost, the day's cost and context fill; warnings on the session and as notifications.
 - **Agent graph:** This Mac → sessions → subagents → tool calls, animated as calls go out and answers come back. Click any node for details; pan and zoom.
 - **Spend:** today's tool calls, tokens and estimated cost, overall and per agent.
+- **Keep Mac awake:** *While working* holds off idle sleep while an agent works, so you can lock the screen; *Lid closed* keeps it running with the lid shut (bag, commute) and turns itself off when the agents are done, the battery runs low or the Mac gets hot. Lid closed asks for your password once and adds `/etc/sudoers.d/agentscope`, which allows only `pmset -a disablesleep 0/1`; Settings → Keep Mac awake removes it.
 - **100 % local.** No network calls, no accounts. Prompt text is never stored.
 
 ## Install
