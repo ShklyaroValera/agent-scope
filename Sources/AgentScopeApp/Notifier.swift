@@ -94,6 +94,11 @@ final class Notifier: NSObject, UNUserNotificationCenterDelegate {
         post(id: id, sessionId: "", title: "Agents spent \(Format.cost(spent)) today", body: "Over your daily limit of \(Format.cost(limit)) (estimate)", sound: true)
     }
 
+    /// Lid-closed mode ended on its own: the Mac will sleep when the lid is closed again.
+    func keepAwakeOff(reason: String) {
+        post(id: "keep-awake-\(Date().timeIntervalSince1970)", sessionId: "", title: "Your Mac can sleep again", body: "\(reason), so closing the lid sleeps as usual.", sound: true)
+    }
+
     private func post(id: String, sessionId: String, title: String, body: String, sound: Bool, category: String = Notifier.category) {
         guard let center else { return }
         let content = UNMutableNotificationContent()

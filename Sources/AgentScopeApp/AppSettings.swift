@@ -39,6 +39,20 @@ final class AppSettings {
     var allowDenyWait: Int {
         didSet { defaults.set(allowDenyWait, forKey: "allowDenyWait") }
     }
+    var keepAwake: KeepAwakeMode {
+        didSet { defaults.set(keepAwake.rawValue, forKey: "keepAwake") }
+    }
+    /// Lid-closed mode turns off once agents have been done this long.
+    var keepAwakeIdleMinutes: Int {
+        didSet { defaults.set(keepAwakeIdleMinutes, forKey: "keepAwakeIdleMinutes") }
+    }
+    /// Lid-closed mode turns off below this battery level when not charging; 0 never.
+    var keepAwakeMinBattery: Int {
+        didSet { defaults.set(keepAwakeMinBattery, forKey: "keepAwakeMinBattery") }
+    }
+    var keepAwakePolicy: KeepAwakePolicy {
+        KeepAwakePolicy(idleMinutes: keepAwakeIdleMinutes, minBattery: keepAwakeMinBattery > 0 ? keepAwakeMinBattery : nil)
+    }
     var notifyStuck: Bool {
         didSet { defaults.set(notifyStuck, forKey: "notifyStuck") }
     }
@@ -75,6 +89,9 @@ final class AppSettings {
         let categories = defaults.stringArray(forKey: "allowDenyCategories")?.compactMap(PermissionCategory.init(rawValue:))
         allowDenyCategories = Set(categories ?? PermissionCategory.allCases)
         allowDenyWait = defaults.object(forKey: "allowDenyWait") as? Int ?? 30
+        keepAwake = defaults.string(forKey: "keepAwake").flatMap(KeepAwakeMode.init(rawValue:)) ?? .off
+        keepAwakeIdleMinutes = defaults.object(forKey: "keepAwakeIdleMinutes") as? Int ?? 5
+        keepAwakeMinBattery = defaults.object(forKey: "keepAwakeMinBattery") as? Int ?? 20
         notifyStuck = defaults.object(forKey: "notifyStuck") as? Bool ?? true
         notifyLimits = defaults.object(forKey: "notifyLimits") as? Bool ?? true
         switcherShortcut = defaults.object(forKey: "switcherShortcut") as? Bool ?? true

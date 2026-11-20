@@ -50,6 +50,33 @@ struct SettingsView: View {
             }
 
             Section {
+                Picker("Mode", selection: Bindable(model).keepAwakeMode) {
+                    ForEach(KeepAwakeMode.allCases) { Text($0.title).tag($0) }
+                }
+                Picker("With the lid closed, turn off when agents are done for", selection: $settings.keepAwakeIdleMinutes) {
+                    ForEach([1, 5, 10, 30, 60], id: \.self) { Text("\($0) min").tag($0) }
+                }
+                Picker("…or when the battery drops below", selection: $settings.keepAwakeMinBattery) {
+                    Text("Never").tag(0)
+                    ForEach([10, 20, 30, 50], id: \.self) { Text("\($0)%").tag($0) }
+                }
+                if refresh >= 0, model.keepAwake.accessInstalled {
+                    LabeledContent("Lid closed works without a password") {
+                        Button("Remove") {
+                            if model.keepAwakeMode == .lidClosed { model.keepAwakeMode = .off }
+                            model.keepAwakeError = model.keepAwake.removeAccess().flatMap { $0.isEmpty ? nil : $0 }
+                            refresh += 1
+                        }
+                    }
+                }
+            } header: {
+                Text("Keep Mac awake")
+            } footer: {
+                Text("Lid closed asks for your password once and adds a rule to /etc/sudoers.d/agentscope that allows only `pmset -a disablesleep 0/1`. It also turns off when your Mac runs hot and when AgentScope quits.")
+                    .font(.ui(11)).foregroundStyle(.secondary)
+            }
+
+            Section {
                 Toggle("Show Claude Code's plan limits", isOn: Binding(
                     get: { _ = refresh; return model.claudeLimitsEnabled },
                     set: { model.setClaudeLimits($0); refresh += 1 }

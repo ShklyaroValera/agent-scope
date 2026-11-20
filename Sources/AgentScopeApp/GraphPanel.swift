@@ -50,6 +50,8 @@ struct GraphPanel: View {
                 stat(store.callsPerMinute(), "calls/min")
                 stat(needsYou, "needs you")
             }
+            KeepAwakeMenu(mode: Bindable(model).keepAwakeMode)
+                .padding(.leading, 6)
             Button {
                 logVisible.toggle()
             } label: {
@@ -62,7 +64,6 @@ struct GraphPanel: View {
             .buttonStyle(HoverButtonStyle(cornerRadius: 6))
             .keyboardShortcut("l", modifiers: [.command, .option])
             .help(logVisible ? "Hide event log (⌥⌘L)" : "Show event log (⌥⌘L)")
-            .padding(.leading, 6)
         }
         .padding(.horizontal, 24)
         .frame(height: 56)

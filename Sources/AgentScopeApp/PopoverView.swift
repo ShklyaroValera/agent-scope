@@ -32,12 +32,17 @@ struct PopoverView: View {
                     limits(snapshot.limits, now: context.date)
                 }
                 stats(snapshot.today)
+                keepAwake
                 footer
             }
         }
         .frame(width: 356)
         .background(Palette.surface)
+        .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { contentHeight = $0 }
+        .background(PopoverWindowFitter(height: contentHeight))
     }
+
+    @State private var contentHeight: CGFloat = 0
 
     private func header(_ snapshot: DashboardSnapshot) -> some View {
         HStack(spacing: 8) {
@@ -112,6 +117,22 @@ struct PopoverView: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
+    }
+
+    private var keepAwake: some View {
+        @Bindable var model = model
+        return VStack(alignment: .leading, spacing: 6) {
+            Text("KEEP MAC AWAKE")
+                .font(.ui(11, .semibold))
+                .tracking(0.22)
+                .foregroundStyle(Palette.textTertiary)
+            KeepAwakePicker(mode: $model.keepAwakeMode)
+            Text(model.keepAwakeError ?? model.keepAwakeMode.hint)
+                .font(.ui(11))
+                .foregroundStyle(model.keepAwakeError == nil ? Palette.textTertiary : Palette.failedText)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(EdgeInsets(top: 0, leading: 16, bottom: 12, trailing: 16))
     }
 
     private var footer: some View {
@@ -339,5 +360,26 @@ private struct PopoverSessionButton: View {
         .onHover { hovering = $0 }
         .help(destination.map { "Go to \($0)" } ?? "No window found for this agent")
         .contextMenu { SessionMenu(sessionId: summary.id) }
+    }
+}
+
+/// `MenuBarExtra`'s window grows with its content but never shrinks back, so fewer sessions left an
+/// empty translucent margin around the popover. Fits the window to the content, top edge kept in place.
+private struct PopoverWindowFitter: NSViewRepresentable {
+    let height: CGFloat
+
+    func makeNSView(context: Context) -> NSView { NSView() }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        let height = height
+        DispatchQueue.main.async {
+            guard height > 0, let window = view.window else { return }
+            let target = window.frameRect(forContentRect: NSRect(x: 0, y: 0, width: window.frame.width, height: height)).height
+            var frame = window.frame
+            guard abs(frame.height - target) > 0.5 else { return }
+            frame.origin.y += frame.height - target
+            frame.size.height = target
+            window.setFrame(frame, display: true)
+        }
     }
 }

@@ -38,6 +38,9 @@ final class AppModel {
     @ObservationIgnored private lazy var mockStore = EventStore.mock()
     @ObservationIgnored private lazy var transcripts = TranscriptCoordinator(store: store, paths: paths)
     @ObservationIgnored private let notifier = Notifier()
+    @ObservationIgnored let keepAwake = KeepAwakeController()
+    /// Why the last keep-awake switch failed, shown under the control.
+    var keepAwakeError: String?
     @ObservationIgnored private var hotKey: GlobalHotKey?
     @ObservationIgnored private var switcherHotKey: GlobalHotKey?
     @ObservationIgnored let quickSwitcher = QuickSwitcher()
@@ -206,12 +209,16 @@ final class AppModel {
         notifier.onJump = { [weak self] in self?.jump(toSession: $0) }
         notifier.onDecide = { [weak self] in self?.decide(sessionId: $0, allow: $1) }
         notifier.start()
+        settings.keepAwake = keepAwake.recover(mode: settings.keepAwake)
+        keepAwake.onTurnedOff = { [weak self] in self?.notifier.keepAwakeOff(reason: $0) }
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.everySecond() }
         }
     }
 
     func stop() {
+        keepAwake.shutdown()
+        if settings.keepAwake == .lidClosed { settings.keepAwake = .off }
         server?.stop()
         server = nil
         timer?.invalidate()
@@ -278,6 +285,10 @@ final class AppModel {
 
     private func everySecond() {
         store.tick()
+        let mode = keepAwake.tick(
+            mode: settings.keepAwake, policy: settings.keepAwakePolicy, sessions: store.sessions.values.map(\.session), now: Date()
+        )
+        if mode != settings.keepAwake { settings.keepAwake = mode }
         if !heldDecisions.isEmpty { expireDecisions() }
         checkAttention()
         let now = Date()
@@ -488,6 +499,16 @@ final class AppModel {
     }
 
     // MARK: - Actions
+
+    /// The keep-awake control in the popover and the graph header.
+    var keepAwakeMode: KeepAwakeMode {
+        get { settings.keepAwake }
+        set {
+            let result = keepAwake.select(newValue, from: settings.keepAwake)
+            settings.keepAwake = result.mode
+            keepAwakeError = result.error.flatMap { $0.isEmpty ? nil : $0 }
+        }
+    }
 
     func openGraph() {
         NSApp.activate(ignoringOtherApps: true)
