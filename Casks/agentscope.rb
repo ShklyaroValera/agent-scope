@@ -3,8 +3,8 @@
 #   brew install --cask shklyarovalera/agent-scope/agentscope
 # scripts/release.sh fills in version and sha256; .github/workflows/release.yml runs it on a v* tag.
 cask "agentscope" do
-  version "0.2.0"
-  sha256 "acce35a7f93568c7ff68c6a11132e9b4633fda8a219e0a4959f58756867cf05d"
+  version "0.3.0"
+  sha256 "7279b5e76755609f9506b6de70ec8bb25dd027a9b5cbebb41cde783dcaf343a1"
 
   url "https://github.com/ShklyaroValera/agent-scope/releases/download/v#{version}/AgentScope-#{version}.zip"
   name "AgentScope"
